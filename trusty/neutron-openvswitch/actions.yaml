@@ -1,0 +1,2 @@
+git-reinstall:
+    description: Reinstall neutron-openvswitch from the openstack-origin-git repositories.

@@ -1,0 +1,9 @@
+#!/usr/bin/python
+
+"""Amulet tests on a basic keystone deployment on trusty-icehouse."""
+
+from basic_deployment import KeystoneBasicDeployment
+
+if __name__ == '__main__':
+    deployment = KeystoneBasicDeployment(series='trusty')
+    deployment.run_tests()

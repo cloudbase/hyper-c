@@ -1,0 +1,24 @@
+options:
+  cluster-name:
+    type: string
+    default: s2d
+    description: "Cluster name"
+  static-address:
+    type: string
+    description: "Static address for the cluster. This option is mandatory"
+  storage-pool:
+    type: string
+    default: "s2d"
+    description: "Storage pool name"
+  volume-name:
+    type: string
+    default: s2dvolume
+    description: "Name of volume inside S2D"
+  scaleout-name:
+    type: string
+    default: s2dscaleout
+    description: "Friendly name of scale out fileserver"
+  minimum-nodes:
+    type: int
+    default: 4
+    description: "Minimum number of nodes to wait for before starting cluster operations"

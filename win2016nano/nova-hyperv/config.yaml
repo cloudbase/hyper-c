@@ -1,0 +1,101 @@
+options:
+  openstack-origin:
+    type: string
+    default: liberty
+    description: |
+      Version of Openstack nova compute to install. Choices are:
+      - juno
+      - kilo
+      - liberty
+  openstack-version:
+    type: string
+    default: liberty
+    description: |
+      Version of Openstack nova compute to install. This option overrides
+      openstack-origin. Choices are:
+      - juno
+      - kilo
+      - liberty
+  installer-url:
+    type: string
+    default: ""
+    description: |
+      overwrite default installer location. Take care to set the correct openstack-version
+      as that will be used by the charm to pick the correct config templates.
+      If you use this option, you may enable file integrity checking by specifying
+      an md5sum at the end of the URL as follows:
+        https://example.com/installer.msi#md5=<hash>
+  ovs-installer-url:
+    type: string
+    default: "https://www.cloudbase.it/downloads/openvswitch-hyperv-installer-beta.msi#md5=9fdf53bb41dd398843a0ac52fe023a65"
+    description: |
+      Location of the OVS MSI installer
+  os-data-network:
+    type: string
+    description: |
+      The IP address and netmask of the OpenStack Data network (e.g.,
+      192.168.0.0/24) . This network will be used for tenant network traffic in
+      overlay networks.
+      NOTE: If ovs is selected as the network type, this option overrides
+      data-port. OVS on Windows requires that the os data network be set on the
+      vmswitch itself. That means that if an interface has an IP in the os-data-network
+      range, that interface will be added to the vmswitch. There is a caveat here.
+      If os-data-network is on a different interface then data-port, it might result
+      in the hyper-v compute nodes not being able to use VLAN network segregation.
+  rabbit-user:
+    default: nova
+    type: string
+    description: Username used to access rabbitmq queue
+  rabbit-vhost:
+    default: openstack
+    type: string
+    description: Rabbitmq vhost
+  data-port:
+    type: string
+    default: ""
+    description: |
+      Ethernet inerface to use for vmswitch. This can be a MAC address or an interface name.
+      This option is mandatory if more then one interface is present on the target system.
+      In cases where there is only one interface on the system, the vmswitch will be created using that
+      interface and OSManagement will be set to True, regardless of the vmswitch-management option.
+      Avoid using the management interface as a data interface where system has more then one NIC.
+      If you would like to use bonding, make sure you supply valid MAC addresses in the bond-ports
+      config field, and use "bond0" as a data-port name.
+  bond-ports:
+    type: string
+    default: ""
+    description: |
+      MAC addresses of ports participating in bond link. A new Net-LbfoTeam called bond0 will be created
+      in LACP mode. This interface can be used as a data-port.
+  use-bonding:
+    type: boolean
+    default: false
+    description: |
+      Set up bonding interface
+  vmswitch-name:
+    default: br100
+    type: string
+    description: Virtual switch to use
+  vmswitch-management:
+    default: False
+    type: boolean
+    description: |
+      Allow management OS on this vm switch. If True, the switch will be set in DHCP mode.
+  log-dir:
+    default: C:/OpenStack/Log
+    type: string
+    description: |
+      Log folder location
+  network-type:
+    type: string
+    default: hyperv
+    description: |
+      Neutron agent to use. Valid options are:
+        * hyperv
+        * ovs
+      Default is hyperv. Note: ovs is available for Kilo and above
+  instances-dir:
+    default: C:/OpenStack/Instances
+    type: string
+    description: |
+      Location in which to store VM disks

@@ -1,0 +1,410 @@
+options:
+  debug:
+    default: False
+    type: boolean
+    description: Enable debug logging.
+  verbose:
+    default: False
+    type: boolean
+    description: Enable verbose logging.
+  use-syslog:
+    type: boolean
+    default: False
+    description: |
+      Setting this to True will allow supporting services to log to syslog.
+  openstack-origin:
+    default: distro
+    type: string
+    description: |
+      Repository from which to install.  May be one of the following:
+      distro (default), ppa:somecustom/ppa, a deb url sources entry,
+      or a supported Cloud Archive release pocket.
+
+      Supported Cloud Archive sources include:
+
+      cloud:<series>-<openstack-release>
+      cloud:<series>-<openstack-release>/updates
+      cloud:<series>-<openstack-release>/staging
+      cloud:<series>-<openstack-release>/proposed
+
+      For series=Precise we support cloud archives for openstack-release:
+         * icehouse
+
+      For series=Trusty we support cloud archives for openstack-release:
+         * juno
+         * kilo
+         * ...
+
+      NOTE: updating this setting to a source that is known to provide
+      a later version of OpenStack will trigger a software upgrade.
+
+      NOTE: when openstack-origin-git is specified, openstack specific
+      packages will be installed from source rather than from the
+      openstack-origin repository.
+  openstack-origin-git:
+    default:
+    type: string
+    description: |
+      Specifies a YAML-formatted dictionary listing the git
+      repositories and branches from which to install OpenStack and
+      its dependencies.
+
+      Note that the installed config files will be determined based on
+      the OpenStack release of the openstack-origin option.
+
+      For more details see README.md.
+  rabbit-user:
+    default: neutron
+    type: string
+    description: Username used to access rabbitmq queue
+  rabbit-vhost:
+    default: openstack
+    type: string
+    description: Rabbitmq vhost
+  database-user:
+    default: neutron
+    type: string
+    description: Username for Neutron database access (if enabled)
+  database:
+    default: neutron
+    type: string
+    description: Database name for Neutron (if enabled)
+  region:
+    default: RegionOne
+    type: string
+    description: OpenStack Region
+  neutron-security-groups:
+    type: boolean
+    default: False
+    description: |
+      Use quantum for security group management.
+  neutron-external-network:
+    type: string
+    default: ext_net
+    description: |
+      Name of the external network for floating IP addresses provided by
+      Neutron.
+  network-device-mtu:
+    type: int
+    default:
+    description: |
+      The MTU size for interfaces managed by neutron. If unset or set to
+      0, no value will be applied. This value will be provided to
+      neutron-plugin-api relations.
+  neutron-plugin:
+    default: ovs
+    type: string
+    description: |
+      Neutron plugin to use for network management; supports
+      .
+        ovs - OpenvSwitch Plugin
+        nsx - VMWare NSX
+        Calico - Project Calico Networking
+      .
+  overlay-network-type:
+    default: gre
+    type: string
+    description: |
+      Overlay network types to use, valid options include:
+      .
+        gre
+        vxlan
+      .
+      Multiple types can be provided - field is space delimited.
+  flat-network-providers:
+    type: string
+    default:
+    description: |
+      Space-delimited list of Neutron flat network providers.
+  vlan-ranges:
+    type: string
+    default: "physnet1:1000:2000"
+    description: |
+      Space-delimited list of <physical_network>:<vlan_min>:<vlan_max> or
+      <physical_network> specifying physical_network names usable for VLAN
+      provider and tenant networks, as well as ranges of VLAN tags on each
+      available for allocation to tenant networks.
+  # Quota configuration settings
+  quota-security-group:
+    default: 10
+    type: int
+    description: |
+      Number of security groups allowed per tenant. A negative value means
+      unlimited.
+  quota-security-group-rule:
+    default: 100
+    type: int
+    description: |
+      Number of security group rules allowed per tenant. A negative value means
+      unlimited
+  quota-network:
+    default: 10
+    type: int
+    description: |
+      Number of networks allowed per tenant. A negative value means unlimited.
+  quota-subnet:
+    default: 10
+    type: int
+    description: |
+      Number of subnets allowed per tenant. A negative value means unlimited.
+  quota-port:
+    default: 50
+    type: int
+    description: |
+      Number of ports allowed per tenant. A negative value means unlimited.
+  quota-vip:
+    default: 10
+    type: int
+    description: |
+      Number of vips allowed per tenant. A negative value means unlimited.
+  quota-pool:
+    default: 10
+    type: int
+    description: |
+      Number of pools allowed per tenant. A negative value means unlimited.
+  quota-member:
+    default: -1
+    type: int
+    description: |
+      Number of pool members allowed per tenant. A negative value means
+      unlimited. The default is unlimited because a member is not a real
+      resource consumer on Openstack. However, on back-end, a member is a
+      resource consumer and that is the reason why quota is possible.
+  quota-health-monitors:
+    default: -1
+    type: int
+    description: |
+      Number of health monitors allowed per tenant. A negative value means
+      unlimited.
+      The default is unlimited because a health monitor is not a real resource
+      consumer on Openstack. However, on back-end, a member is a resource
+      consumer and that is the reason why quota is possible.
+  quota-router:
+    default: 10
+    type: int
+    description: |
+      Number of routers allowed per tenant. A negative value means unlimited.
+  quota-floatingip: 
+    default: 50
+    type: int
+    description: |
+      Number of floating IPs allowed per tenant. A negative value means
+      unlimited.
+  # HA configuration settings
+  vip:
+    type: string
+    default:
+    description: |
+      Virtual IP(s) to use to front API services in HA configuration.
+      .
+      If multiple networks are being used, a VIP should be provided for each
+      network, separated by spaces.
+  vip_iface:
+    type: string
+    default: eth0
+    description: |
+      Default network interface to use for HA vip when it cannot be
+      automatically determined.
+  vip_cidr:
+    type: int
+    default: 24
+    description: |
+      Default CIDR netmask to use for HA vip when it cannot be automatically
+      determined.
+  ha-bindiface:
+    type: string
+    default: eth0
+    description: |
+      Default network interface on which HA cluster will bind to communication
+      with the other members of the HA Cluster.
+  ha-mcastport:
+    type: int
+    default: 5424
+    description: |
+       Default multicast port number that will be used to communicate between
+       HA Cluster nodes.
+  # Network configuration options
+  # by default all access is over 'private-address'
+  os-admin-network:
+    type: string
+    default:
+    description: |
+      The IP address and netmask of the OpenStack Admin network (e.g.,
+      192.168.0.0/24)
+      .
+      This network will be used for admin endpoints.
+  os-internal-network:
+    type: string
+    default:
+    description: |
+      The IP address and netmask of the OpenStack Internal network (e.g.,
+      192.168.0.0/24)
+      .
+      This network will be used for internal endpoints.
+  os-public-network:
+    type: string
+    default:
+    description: |
+      The IP address and netmask of the OpenStack Public network (e.g.,
+      192.168.0.0/24)
+      .
+      This network will be used for public endpoints.
+  os-public-hostname:
+    type: string
+    default:
+    description: |
+      The hostname or address of the public endpoints created for neutron-api
+      in the keystone identity provider.
+      .
+      This value will be used for public endpoints. For example, an
+      os-public-hostname set to 'neutron-api.example.com' with ssl enabled
+      will create the following endpoint for neutron-api:
+      .
+      https://neutron-api.example.com:9696/
+  ssl_cert:
+    type: string
+    default:
+    description: |
+      SSL certificate to install and use for API ports.  Setting this value
+      and ssl_key will enable reverse proxying, point Neutron's entry in the
+      Keystone catalog to use https, and override any certficiate and key
+      issued by Keystone (if it is configured to do so).
+  ssl_key:
+    type: string
+    default:
+    description: SSL key to use with certificate specified as ssl_cert.
+  ssl_ca:
+    type: string
+    default:
+    description: |
+      SSL CA to use with the certificate and key provided - this is only
+      required if you are providing a privately signed ssl_cert and ssl_key.
+  l2-population:
+    type: boolean
+    default: True
+    description: |
+      Populate the forwarding tables of virtual switches (LinuxBridge or OVS),
+      to decrease broadcast traffics inside the physical networks fabric while
+      using overlays networks (VXLan, GRE).
+  prefer-ipv6:
+    type: boolean
+    default: False
+    description: |
+      If True enables IPv6 support. The charm will expect network interfaces
+      to be configured with an IPv6 address. If set to False (default) IPv4
+      is expected.
+      .
+      NOTE: these charms do not currently support IPv6 privacy extension. In
+      order for this charm to function correctly, the privacy extension must be
+      disabled and a non-temporary address must be configured/available on
+      your network interface.
+  worker-multiplier:
+    type: int
+    default: 2
+    description: |
+      The CPU core multiplier to use when configuring worker processes for
+      Neutron.  By default, the number of workers for each daemon is set to
+      twice the number of CPU cores a service unit has.
+  # VMware NSX plugin configuration
+  nsx-controllers:
+    type: string
+    default:
+    description: Space delimited addresses of NSX controllers
+  nsx-username:
+    type: string
+    default: admin
+    description: Username to connect to NSX controllers with
+  nsx-password:
+    type: string
+    default: admin
+    description: Password to connect to NSX controllers with
+  nsx-tz-uuid:
+    type: string
+    default:
+    description: |
+      This is uuid of the default NSX Transport zone that will be used for
+      creating tunneled isolated Quantum networks.  It needs to be created
+      in NSX before starting Quantum with the nsx plugin.
+  nsx-l3-uuid:
+    type: string
+    default:
+    description: |
+      This is uuid of the default NSX L3 Gateway Service.
+  # end of NSX configuration
+  nagios_context:
+    default: "juju"
+    type: string
+    description: |
+      Used by the nrpe-external-master subordinate charm.
+      A string that will be prepended to instance name to set the host name
+      in nagios. So for instance the hostname would be something like:
+          juju-myservice-0
+      If you're running multiple environments with the same services in them
+      this allows you to differentiate between them.
+  enable-dvr:
+    default: False
+    type: boolean
+    description: |
+      Enable Distributed Virtual Routing (juno and above).
+  enable-l3ha:
+    default: False
+    type: boolean
+    description: |
+      Enable L3 HA (juno and above).
+  max-l3-agents-per-router:
+    default: 2
+    type: int
+    description: |
+      Maximum number of l3 agents to host a router. Only used when enable-l3ha
+      is True
+  min-l3-agents-per-router:
+    default: 2
+    type: int
+    description: |
+      Minimum number of l3 agents to host a router. Only used when enable-l3ha
+      is True
+  nagios_servicegroups:
+    default: ""
+    type: string
+    description: |
+      A comma-separated list of nagios servicegroups.
+      If left empty, the nagios_context will be used as the servicegroup
+  # PLUMgrid Plugin configuration
+  plumgrid-username:
+    default: plumgrid
+    type: string
+    description: Username to access PLUMgrid Director
+  plumgrid-password:
+    default: plumgrid
+    type: string
+    description: Password to access PLUMgrid Director
+  plumgrid-virtual-ip:
+    default:
+    type: string
+    description: IP address of PLUMgrid Director
+  # end of PLUMgrid configuration
+  manage-neutron-plugin-legacy-mode:
+    type: boolean
+    default: True
+    description: |
+      If True neutron-server will install neutron packages for the plugin
+      configured.
+  # Calico plugin configuration
+  calico-origin:
+    default:
+    type: string
+    description: |
+      Repository from which to install Calico packages. If set, must be
+      a PPA URL, of the form ppa:somecustom/ppa. Changing this value
+      after installation will force an immediate software upgrade.
+  # End of Calico plugin configuration
+  action-managed-upgrade:
+    type: boolean
+    default: False
+    description: |
+      If True enables openstack upgrades for this charm via juju actions.
+      You will still need to set openstack-origin to the new repository but
+      instead of an upgrade running automatically across all units, it will
+      wait for you to execute the openstack-upgrade action for this charm on
+      each unit. If False it will revert to existing behavior of upgrading
+      all units on config change.

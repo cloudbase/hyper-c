@@ -1,0 +1,37 @@
+name: glance
+maintainer: Adam Gandelman <adamg@canonical.com>
+summary: "OpenStack Image Registry and Delivery Service"
+description: |
+ The Glance project provides an image registration and discovery service
+ (Parallax) and an image delivery service (Teller). These services are used
+ in conjunction by Nova to deliver images from object stores, such as
+ OpenStack's Swift service, to Nova's compute nodes.
+tags:
+  - openstack
+  - storage
+  - misc
+provides:
+  nrpe-external-master:
+    interface: nrpe-external-master
+    scope: container
+  image-service:
+    interface: glance
+requires:
+  shared-db:
+    interface: mysql-shared
+  pgsql-db:
+    interface: pgsql
+  amqp:
+    interface: rabbitmq
+  object-store:
+    interface: swift-proxy
+  identity-service:
+    interface: keystone
+  ceph:
+    interface: ceph-client
+  ha:
+    interface: hacluster
+    scope: container
+peers:
+  cluster:
+    interface: glance-ha

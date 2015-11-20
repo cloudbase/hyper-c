@@ -1,0 +1,11 @@
+#!/usr/bin/python
+# NeutronOVSBasicDeployment
+"""Amulet tests on a basic neutron-openvswitch deployment on precise-icehouse."""
+
+from basic_deployment import NeutronOVSBasicDeployment
+
+if __name__ == '__main__':
+    deployment = NeutronOVSBasicDeployment(series='precise',
+                                           openstack='cloud:precise-icehouse',
+                                           source='cloud:precise-updates/icehouse')
+    deployment.run_tests()

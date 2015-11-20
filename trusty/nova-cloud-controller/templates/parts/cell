@@ -1,0 +1,6 @@
+{% if cell_type -%}
+[cells]
+enable=True
+name={{ cell_name }}
+cell_type={{ cell_type }}
+{% endif -%}

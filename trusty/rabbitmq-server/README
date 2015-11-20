@@ -1,0 +1,36 @@
+Configuring SSL
+---------------
+Generate an unencrypted RSA private key for the servers and a certificate:
+
+  openssl genrsa -out rabbit-server-privkey.pem 2048
+
+Get an X.509 certificate. This can be self-signed, for example:
+
+  openssl req -batch -new -x509 -key rabbit-server-privkey.pem -out rabbit-server-cert.pem -days 10000
+
+Deploy the service:
+
+  juju deploy rabbitmq-server rabbit
+
+Enable SSL, passing in the key and certificate as configuration settings:
+
+  juju set rabbit ssl_enabled=True ssl_key="`cat rabbit-server-privkey.pem`" ssl_cert="`cat rabbit-server-cert.pem`"
+
+To change the source that the charm uses for packages:
+
+  juju set rabbit source="cloud:precise-icehouse"
+
+This will enable the Icehouse pocket of the Cloud Archive (which contains a new version of RabbitMQ) and upgrade the install to the new version.
+
+The source option can be used in a few different ways:
+
+  source="ppa:james-page/testing" - use the testing PPA owned by james-page
+  source="http://myrepo/ubuntu main" - use the repository located at the provided URL
+
+The charm also supports use of arbitary archive key's for use with private repositories:
+
+  juju set rabbit key="C6CEA0C9"
+
+Note that in clustered configurations, the upgrade can be a bit racey as the services restart and re-cluster; this is resolvable using:
+
+  juju resolved --retry rabbitmq/1

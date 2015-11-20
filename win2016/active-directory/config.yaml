@@ -1,0 +1,67 @@
+options:
+  default-administrator-password:
+    type: string
+    default: ''
+    description: |
+      The password for the default local administrator user.
+      If set to an empty value, the default local administrator password will not be changed. This
+        can be the case for various providers like AWS, where the default local
+        administrator user password is already set. In the case that the provider
+        does not set a strong password for the default local administrator,
+        make sure to specify a strong password.
+      A strong password for the default local administrator is a requirement for
+      Active Directory Domain installation.
+      To enable scaling, a strong password must be provided, as it is needed to
+        promote an active directory node to an active directory controller.
+      The value must conform to the password requirements
+      described at: https://technet.microsoft.com/en-us/library/cc786468(v=ws.10).aspx
+  uninstall-password:
+    type: string
+    default: ''
+    description: |
+      The password for the local administrator user, when the AD is uninstalled.
+      A strong password for the local administrator is a requirement for
+      Active Directory Domain uninstall.
+      The value must conform to the password requirements
+      described at: https://technet.microsoft.com/en-us/library/cc786468(v=ws.10).aspx
+  safe-mode-password:
+    type: string
+    default: ''
+    description: |
+      The safe mode password for the Active Directory.
+      A strong safe mode password is a requirement for
+      Active Directory Domain installation.
+      The value must conform to the password requirements
+      described at: https://technet.microsoft.com/en-us/library/cc786468(v=ws.10).aspx
+  default-domain-user:
+    default: ''
+    type: string
+    description: |
+      The domain user that will be exposed by the Active Directory charm relation.
+      It can be used by the charms that are in relation to connect to the
+      Active Directory domain, as only a Domain user has the rights to connect
+      a machine to that domain.
+      This value is required vor the Active Directory installation.
+  default-domain-user-password:
+    type: string
+    default: ''
+    description: |
+      The password for the default-domain-user. This value is required.
+      This value must conform to the password requirements
+      described at: https://technet.microsoft.com/en-us/library/cc786468(v=ws.10).aspx
+  domain-name:
+    type: string
+    default: ""
+    description: |
+      The Active Directory fully quallyfied domain name.
+      This value is required vor the Active Directory installation.
+      The format of the domain name must be <netbios domain name>.<domain-suffix>
+      If this value is changed after the domain install, no changes will be performed.
+  open-all-active-directory-ports:
+    type: boolean
+    default: false
+    description: |
+      The Active Directory Controllers have, by default, WinRM, RDP, LDAP(S),
+      DNS and Kerberos ports opened. When set to True, the other Active
+      Directory ports specified by Microsoft will be opened:
+      https://technet.microsoft.com/en-us/library/dd772723(v=ws.10).aspx

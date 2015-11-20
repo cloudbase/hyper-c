@@ -1,0 +1,47 @@
+name: neutron-api
+maintainer: Liam Young <liam@canonical.com>
+summary: "OpenStack Neutron API service"
+description: |
+  Neutron is a virtual network service for OpenStack, and a part of
+  Netstack. Just like OpenStack Nova provides an API to dynamically
+  request and configure virtual servers, Neutron provides an API to
+  dynamically request and configure virtual networks. These networks
+  connect "interfaces" from other OpenStack services (e.g., virtual NICs
+  from Nova VMs). The Neutron API supports extensions to provide
+  advanced network capabilities (e.g., QoS, ACLs, network monitoring,
+  etc.)
+  .
+  This charm provides the OpenStack Neutron API service.
+tags:
+  - openstack
+provides:
+  nrpe-external-master:
+    interface: nrpe-external-master
+    scope: container
+  neutron-api:
+    interface: neutron-api
+  neutron-plugin-api:
+    interface: neutron-plugin-api
+requires:
+  shared-db:
+    interface: mysql-shared
+  pgsql-db:
+    interface: pgsql
+  amqp:
+    interface: rabbitmq
+  identity-service:
+    interface: keystone
+  ha:
+    interface: hacluster
+    scope: container
+  zeromq-configuration:
+    interface: zeromq-configuration
+    scope: container
+  neutron-plugin-api-subordinate:
+    interface: neutron-plugin-api-subordinate
+    scope: container
+  etcd-proxy:
+    interface: etcd-proxy
+peers:
+  cluster:
+    interface: neutron-api-ha

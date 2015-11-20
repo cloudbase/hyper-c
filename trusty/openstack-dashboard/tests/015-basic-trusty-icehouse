@@ -1,0 +1,9 @@
+#!/usr/bin/python
+
+"""Amulet tests on a basic openstack-dashboard deployment on trusty-icehouse."""
+
+from basic_deployment import OpenstackDashboardBasicDeployment
+
+if __name__ == '__main__':
+    deployment = OpenstackDashboardBasicDeployment(series='trusty')
+    deployment.run_tests()

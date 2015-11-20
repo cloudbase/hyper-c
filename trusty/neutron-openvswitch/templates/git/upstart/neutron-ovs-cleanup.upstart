@@ -1,0 +1,17 @@
+description "{{ service_description }}"
+author "Juju {{ charm_name }} Charm <juju@localhost>"
+
+start on started openvswitch-switch
+stop on runlevel [!2345]
+
+pre-start script
+  mkdir -p /var/run/neutron
+  chown neutron:root /var/run/neutron
+end script
+
+pre-start script
+  [ ! -x /usr/bin/{{ process_name }} ] && exit 0
+  start-stop-daemon --start --chuid neutron --exec {{ executable_name }} -- \
+    --log-file /var/log/neutron/{{ log_file }} \
+    --config-file /etc/neutron/neutron.conf --verbose
+end script

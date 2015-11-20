@@ -1,0 +1,32 @@
+name: keystone
+summary: OpenStack identity service
+maintainer: Adam Gandelman <adamg@canonical.com>
+description: |
+ Keystone is an OpenStack project that provides Identity, Token, Catalog and
+ Policy services for use specifically by projects in the OpenStack family. It
+ implements OpenStack’s Identity API.
+tags:
+  - openstack
+  - identity
+  - misc
+provides:
+  nrpe-external-master:
+    interface: nrpe-external-master
+    scope: container
+  identity-service:
+    interface: keystone
+  identity-notifications:
+    interface: keystone-notifications
+  identity-admin:
+    interface: keystone-admin
+requires:
+  shared-db:
+    interface: mysql-shared
+  pgsql-db:
+    interface: pgsql
+  ha:
+    interface: hacluster
+    scope: container
+peers:
+  cluster:
+    interface: keystone-ha

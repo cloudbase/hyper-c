@@ -1,0 +1,229 @@
+options:
+  debug:
+    default: False
+    type: boolean
+    description: Enable debug logging.
+  verbose:
+    default: False
+    type: boolean
+    description: Enable verbose logging.
+  use-syslog:
+    type: boolean
+    default: False
+    description: |
+      Setting this to True will allow supporting services to log to syslog.
+  openstack-origin:
+    default: distro
+    type: string
+    description: |
+      Repository from which to install.  May be one of the following:
+      distro (default), ppa:somecustom/ppa, a deb url sources entry,
+      or a supported Cloud Archive release pocket.
+
+      Supported Cloud Archive sources include:
+
+      cloud:<series>-<openstack-release>
+      cloud:<series>-<openstack-release>/updates
+      cloud:<series>-<openstack-release>/staging
+      cloud:<series>-<openstack-release>/proposed
+
+      For series=Precise we support cloud archives for openstack-release:
+         * icehouse
+
+      For series=Trusty we support cloud archives for openstack-release:
+         * juno
+         * kilo
+         * ...
+
+      NOTE: updating this setting to a source that is known to provide
+      a later version of OpenStack will trigger a software upgrade.
+
+      NOTE: when openstack-origin-git is specified, OpenStack specific
+      packages will be installed from source rather than from the
+      openstack-origin repository.
+  openstack-origin-git:
+    default:
+    type: string
+    description: |
+      Specifies a YAML-formatted dictionary listing the git
+      repositories and branches from which to install OpenStack and
+      its dependencies.
+
+      Note that the installed config files will be determined based on
+      the OpenStack release of the openstack-origin option.
+
+      For more details see README.md.
+  plugin:
+    default: ovs
+    type: string
+    description: |
+      Network configuration plugin to use for quantum.
+      Supported values include:
+
+        ovs - Open vSwitch
+        nvp|nsx - Nicira NVP/VMware NSX
+        n1kv - Cisco N1kv
+        ovs-odl - Open vSwitch with OpenDayLight Controller
+  ext-port:
+    type: string
+    default:
+    description: |
+      Space-delimited list of external ports to use for routing of instance
+      traffic to the external public network. Valid values are either MAC
+      addresses (in which case only MAC addresses for interfaces without an IP
+      address already assigned will be used), or interfaces (eth0)
+  data-port:
+    type: string
+    default:
+    description: |
+      Space-delimited list of bridge:port mappings. Ports will be added to
+      their corresponding bridge. The bridges will allow usage of flat or
+      VLAN network types with Neutron and should match this defined in
+      bridge-mappings.
+      .
+      Ports provided can be the name or MAC address of the interface to be
+      added to the bridge. If MAC addresses are used, you may provide multiple
+      bridge:mac for the same bridge so as to be able to configure multiple
+      units. In this case the charm will run through the provided MAC addresses
+      for each bridge until it finds one it can resolve to an interface name.
+  run-internal-router:
+    type: string
+    default: all
+    description: |
+      Optional configuration to support how the L3 agent option
+      handle_internal_only_routers is configured.
+      all    => Set to be true everywhere
+      none   => Set to be false everywhere
+      leader => Set to be true on one node (the leader) and false everywhere
+                else.
+      Use leader and none when configuring multiple floating pools
+  external-network-id:
+    type: string
+    default:
+    description: |
+      Optional configuration to set the external-network-id. Only needed when
+      configuring multiple external networks and should be used in conjunction
+      with run-internal-router.
+  rabbit-user:
+    type: string
+    description: RabbitMQ user
+    default: neutron
+  rabbit-vhost:
+    type: string
+    description: RabbitMQ Virtual Host
+    default: openstack
+  nova-rabbit-user:
+    type: string
+    description: RabbitMQ Nova user
+    default: nova
+  nova-rabbit-vhost:
+    type: string
+    description: RabbitMQ Nova Virtual Host
+    default: openstack
+  instance-mtu:
+    type: int
+    default:
+    description: |
+      Configure DHCP services to provide MTU configuration to instances
+      within the cloud.  This is useful in deployments where its not
+      possible to increase MTU on switches and physical servers to
+      accommodate the packet overhead of using GRE tunnels.
+  enable-l3-agent:
+    type: boolean
+    default: True
+    description: |
+      Optional configuration to support use of linux router
+      Note that this is used only for Cisco n1kv plugin.
+  database-user:
+    default: nova
+    type: string
+    description: Username for database access
+  database:
+    default: nova
+    type: string
+    description: Database name
+  nagios_context:
+    default: "juju"
+    type: string
+    description: |
+      Used by the nrpe-external-master subordinate charm.
+      A string that will be prepended to instance name to set the host name
+      in Nagios. So for instance the hostname would be something like:
+          juju-myservice-0
+      If you're running multiple environments with the same services in them
+      this allows you to differentiate between them.
+  nagios_servicegroups:
+    default: ""
+    type: string
+    description: |
+      A comma-separated list of Nagios servicegroups.
+      If left empty, the nagios_context will be used as the servicegroup
+  bridge-mappings:
+    type: string
+    default: 'physnet1:br-data'
+    description: |
+      Space-separated list of ML2 data bridge mappings with format
+      <provider>:<bridge>.
+  flat-network-providers:
+    type: string
+    default:
+    description: |
+      Space-delimited list of Neutron flat network providers.
+  vlan-ranges:
+    type: string
+    default: "physnet1:1000:2000"
+    description: |
+      Space-delimited list of <physical_network>:<vlan_min>:<vlan_max> or
+      <physical_network> specifying physical_network names usable for VLAN
+      provider and tenant networks, as well as ranges of VLAN tags on each
+      available for allocation to tenant networks.
+  # Network configuration options
+  # by default all access is over 'private-address'
+  os-data-network:
+    type: string
+    default:
+    description: |
+      The IP address and netmask of the OpenStack Data network (e.g.,
+      192.168.0.0/24)
+
+      This network will be used for tenant network traffic in overlay
+      networks.
+  sysctl:
+    type: string
+    default:
+    description: |
+      YAML-formatted associative array of sysctl key/value pairs to be set
+      persistently e.g. '{ kernel.pid_max : 4194303 }'.
+  # Legacy (Icehouse) HA
+  ha-legacy-mode:
+    type: boolean
+    default: False
+    description: |
+      If True will enable Pacemaker to monitor the neutron-ha-monitor daemon
+      on every neutron-gateway unit, which detects neutron agents status and
+      reschedule resources hosting on failed agents, detects local errors and
+      release resources when network is unreachable or do necessary recover
+      tasks. This feature targets to < Juno which doesn't natively support HA
+      in Neutron itself.
+  ha-bindiface:
+    type: string
+    default: eth0
+    description: |
+      Default network interface on which HA cluster will bind to communicate
+      with the other members of the HA Cluster.
+  ha-mcastport:
+    type: int
+    default: 5409
+    description: |
+      Default multicast port number that will be used to communicate between
+      HA Cluster nodes.
+  action-managed-upgrade:
+    type: boolean
+    default: False
+    description: |
+      If True enables openstack upgrades for this charm via juju actions.
+      You will still need to set openstack-origin to the new repository but
+      instead of an upgrade running automatically across all units, it will
+      wait for you to execute the openstack-upgrade action for this charm on
+      each unit. If False it will revert to existing behavior of upgrading
+      all units on config change.

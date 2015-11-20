@@ -1,0 +1,13 @@
+#!/usr/bin/python
+
+"""Amulet tests on a basic nova cloud controller git deployment on
+   trusty-juno."""
+
+from basic_deployment import NovaCCBasicDeployment
+
+if __name__ == '__main__':
+    deployment = NovaCCBasicDeployment(series='trusty',
+                                       openstack='cloud:trusty-juno',
+                                       source='cloud:trusty-updates/juno',
+                                       git=True)
+    deployment.run_tests()

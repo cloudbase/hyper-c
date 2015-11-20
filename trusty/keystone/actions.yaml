@@ -1,0 +1,17 @@
+git-reinstall:
+  description: Reinstall keystone from the openstack-origin-git repositories.
+pause:
+  description: |
+    Pause keystone services.
+    If the keystone deployment is clustered using the hacluster charm, the
+    corresponding hacluster unit on the node must first be paused as well.
+    Not doing so may lead to an interruption of service.
+resume:
+  description: |
+    Resume keystone services.
+    If the keystone deployment is clustered using the hacluster charm, the
+    corresponding hacluster unit on the node must be resumed as well.
+openstack-upgrade:
+  description: |
+    Perform openstack upgrades. Config option action-managed-upgrade must be
+    set to True.

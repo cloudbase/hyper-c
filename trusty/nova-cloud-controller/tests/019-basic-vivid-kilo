@@ -1,0 +1,10 @@
+#!/usr/bin/python
+
+"""Amulet tests on a basic nova cloud controller deployment on
+   vivid-kilo."""
+
+from basic_deployment import NovaCCBasicDeployment
+
+if __name__ == '__main__':
+    deployment = NovaCCBasicDeployment(series='vivid')
+    deployment.run_tests()
