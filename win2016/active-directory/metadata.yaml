@@ -1,0 +1,20 @@
+name: active-directory
+summary: Windows Active Directory deployment
+maintainer: |
+  Adrian Vladu <avladu@cloudbasesolutions.com>
+  Gabriel Samfira <gsamfira@cloudbasesolutions.com>
+description: |
+  The Active Directory is a directory service implemented
+  by Microsoft.
+categories:
+  - windows
+provides:
+  ad-join:
+    interface:
+      ad-join
+  ad-user:
+    interface:
+      ad-user
+peers:
+  add-controller:
+    interface: add-controller

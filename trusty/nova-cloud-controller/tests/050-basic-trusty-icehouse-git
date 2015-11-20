@@ -1,0 +1,10 @@
+#!/usr/bin/python
+
+"""Amulet tests on a basic nova cloud controller git deployment on
+   trusty-icehouse."""
+
+from basic_deployment import NovaCCBasicDeployment
+
+if __name__ == '__main__':
+    deployment = NovaCCBasicDeployment(series='trusty', git=True)
+    deployment.run_tests()

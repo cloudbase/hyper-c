@@ -1,0 +1,12 @@
+{%- if ssl_only -%}
+ssl_only=true
+{% endif -%}
+{% if ssl_cert -%}
+cert={{ ssl_cert }}
+{% endif -%}
+{% if ssl_key -%}
+key={{ ssl_key }}
+{% endif %}
+{% if novncproxy_base_url -%}
+novncproxy_base_url={{ novncproxy_base_url }}
+{%- endif %}

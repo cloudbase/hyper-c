@@ -1,0 +1,12 @@
+#!/usr/bin/python
+
+"""Amulet tests on a basic nova cloud controller deployment on
+   precise-icehouse."""
+
+from basic_deployment import NovaCCBasicDeployment
+
+if __name__ == '__main__':
+    deployment = NovaCCBasicDeployment(series='precise',
+                                       openstack='cloud:precise-icehouse',
+                                       source='cloud:precise-updates/icehouse')
+    deployment.run_tests()

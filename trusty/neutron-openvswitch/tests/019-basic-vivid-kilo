@@ -1,0 +1,9 @@
+#!/usr/bin/python
+
+"""Amulet tests on a basic neutron-openvswitch deployment on vivid-kilo."""
+
+from basic_deployment import NeutronOVSBasicDeployment
+
+if __name__ == '__main__':
+    deployment = NeutronOVSBasicDeployment(series='vivid')
+    deployment.run_tests()

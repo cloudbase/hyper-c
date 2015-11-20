@@ -1,0 +1,51 @@
+active-directory:
+  default-administrator-password: Passw0rd
+  uninstall-password: Passw0rd
+  safe-mode-password: Passw0rd
+  default-domain-user: jujuadmin
+  default-domain-user-password: Passw0rd
+  domain-name: cloudbase.local
+glance:
+  openstack-origin: "cloud:trusty-liberty"
+keystone:
+  admin-password: "Passw0rd"
+  admin-user: "cbsdemo"
+  openstack-origin: "cloud:trusty-liberty"
+  admin-token: "Passw0rd"
+mysql:
+  max-connections: 1000
+  tuning-level: fast
+neutron-api:
+  neutron-security-groups: True
+  overlay-network-type: "vxlan"
+  openstack-origin: "cloud:trusty-liberty"
+neutron-gateway:
+  # change this to a space delimited list of MAC addresses
+  # that are meant to be external ports
+  ext-port: "52:54:00:7e:88:bd"
+  instance-mtu: 1450
+  openstack-origin: "cloud:trusty-liberty"
+  vlan-ranges: "physnet1:3200:3250"
+neutron-openvswitch:
+  vlan-ranges: "physnet1:3200:3250"
+  # These are all the MAC addresses from all the nodes that are supposed to be
+  # used as data ports. You can find these ports in MaaS under node details
+  # Make sure you change this to match your environment.
+  data-port: "52:54:00:a3:15:9a"
+nova-cloud-controller:
+  network-manager: "Neutron"
+  openstack-origin: "cloud:trusty-liberty"
+openstack-dashboard:
+  openstack-origin: "cloud:trusty-liberty"
+nova-hyperv:
+  use-bonding: false
+  # These are all the MAC addresses from all the nodes that are supposed to be
+  # used as data ports. You can find these ports in MaaS under node details
+  # Make sure you change this to match your environment.
+  data-port: "3c:18:a0:05:cd:1c 3c:18:a0:05:cd:07 3c:18:a0:05:cd:22 3c:18:a0:05:cd:1e"
+  network-type: "hyperv"
+  openstack-version: "liberty"
+s2d-proxy:
+  # change this to an IP address that matches your environment
+  static-address: 192.168.2.9
+

@@ -1,0 +1,189 @@
+options:
+  management_plugin:
+    type: boolean
+    default: False
+    description: enable the management plugin
+  # SSL Configuration options
+  ssl:
+    type: string
+    default: "off"
+    description: |
+      Enable SSL connections on rabbitmq, valid values are 'off', 'on', 'only'. If ssl_key, 
+      ssl_cert, ssl_ca are provided then then those values will be used. Otherwise
+      the service will act as its own certificate authority and pass its ca cert to clients.
+      For HA or clustered rabbits ssl key/cert must be provided.
+  ssl_enabled:
+    type: boolean
+    default: False
+    description: |
+      (DEPRECATED see 'ssl' config option.) enable SSL
+  ssl_port:
+    type: int
+    default: 5671
+    description: SSL port
+  ssl_key:
+    type: string
+    description: private unencrypted key in base64 PEM format (starts "-----BEGIN RSA PRIVATE KEY-----")
+    default:
+  ssl_cert:
+    type: string
+    description: X.509 certificate in base64 PEM format (starts "-----BEGIN CERTIFICATE-----")
+    default:
+  ssl_ca:
+    type: string
+    description: |
+      Certificate authority cert that the cert. Optional if the ssl_cert is signed by a ca
+      recognized by the os. Format is base64 PEM (concatenated certs if needed).
+    default:
+  nagios_context:
+    default: "juju"
+    type: string
+    description: |
+      Used by the nrpe-external-master subordinate charm.
+      A string that will be prepended to instance name to set the host name
+      in nagios. So for instance the hostname would be something like:
+          juju-myservice-0
+      If you're running multiple environments with the same services in them
+      this allows you to differentiate between them.
+  nagios_servicegroups:
+    default: ""
+    type: string
+    description: |
+      A comma-separated list of nagios servicegroups.
+      If left empty, the nagios_context will be used as the servicegroup
+  # HA configuration settings
+  vip:
+    type: string
+    description: "Virtual IP to use to front rabbitmq in ha configuration"
+    default:
+  vip_iface:
+    type: string
+    default: eth0
+    description: "Network Interface where to place the Virtual IP"
+  vip_cidr:
+    type: int
+    default: 24
+    description: "Netmask that will be used for the Virtual IP"
+  ha-bindiface:
+    type: string
+    default: eth0
+    description: |
+      Default network interface on which HA cluster will bind to communication
+      with the other members of the HA Cluster.
+  ha-mcastport:
+    type: int
+    default: 5406
+    description: |
+      Default multicast port number that will be used to communicate between
+      HA Cluster nodes.
+  ha-vip-only:
+    type: boolean
+    default: False
+    description: |
+      By default, without pairing with hacluster charm, rabbitmq will deploy
+      in active/active/active... HA. When pairied with hacluster charm, it
+      will deploy as active/passive. By enabling this option, pairing with
+      hacluster charm will keep rabbit in active/active setup, but in addition
+      it will deploy a VIP that can be used by services that cannot work
+      with mutiple AMQPs (like Glance in pre-Icehouse).
+  mirroring-queues:
+    type: boolean
+    default: True
+    description: |
+      When set to true the 'ha-mode: all' policy is applied to all the exchages
+      that match the expression '^(?!amq\.).*'
+  rbd-size:
+    type: string
+    default: 5G
+    description: |
+      Default rbd storage size to create when setting up block storage.
+      This value should be specified in GB (e.g. 100G).
+  rbd-name:
+    type: string
+    default: rabbitmq1
+    description: |
+      The name that will be used to create the Ceph's RBD image with. If the
+      image name exists in Ceph, it will be re-used and the data will be
+      overwritten.
+  ceph-osd-replication-count:
+    default: 3
+    type: int
+    description: |
+      This value dictates the number of replicas ceph must make of any
+      object it stores within the rabbitmq rbd pool. Of course, this only
+      applies if using Ceph as a backend store. Note that once the rabbitmq
+      rbd pool has been created, changing this value will not have any
+      effect (although it can be changed in ceph by manually configuring
+      your ceph cluster).
+  use-syslog:
+    type: boolean
+    default: False
+    description: |
+      If True, services that support it will log to syslog instead of their normal
+      log location.
+  max-cluster-tries:
+    type: int
+    default: 3
+    description: |
+      Number of tries to cluster with other units before giving up and throwing
+      a hook error.
+  source:
+    type: string
+    default:
+    description: |
+      Optional configuration to support use of additional sources such as:
+      .
+        - ppa:myteam/ppa
+        - cloud:precise-proposed/folsom
+        - http://my.archive.com/ubuntu main
+      .
+      The last option should be used in conjunction with the key configuration
+      option.
+  key:
+    type: string
+    default:
+    description: |
+      Key ID to import to the apt keyring to support use with arbitary source
+      configuration from outside of Launchpad archives or PPA's.
+  # Network configuration options
+  # by default all access is over 'private-address'
+  access-network:
+    type: string
+    default:
+    description: |
+      The IP address and netmask of the 'access' network (e.g., 192.168.0.0/24)
+       .
+      This network will be used for access to RabbitMQ messaging services.
+  prefer-ipv6:
+    type: boolean
+    default: False
+    description: |
+      If True enables IPv6 support. The charm will expect network interfaces
+      to be configured with an IPv6 address. If set to False (default) IPv4
+      is expected.
+      .
+      NOTE: these charms do not currently support IPv6 privacy extension. In
+      order for this charm to function correctly, the privacy extension must be
+      disabled and a non-temporary address must be configured/available on
+      your network interface.
+  min-cluster-size:
+    type: int
+    default:
+    description: |
+      Minimum number of units expected to exist before charm will attempt to
+      form a rabbitmq cluster.
+  stats_cron_schedule:
+      type: string
+      default: '*/5 * * * *'
+      description: |
+        Cron schedule used to generate rabbitmq stats. If unset
+        no stats will be generated
+  queue_thresholds:
+      type: string
+      default: "[['\\*', '\\*', 100, 200]]"
+      description: |
+        List of RabbitMQ queue size check thresholds. Interpreted as YAML
+        in format [<vhost>, <queue>, <warn>, <crit>]
+        - ['/', 'queue1', 10, 20]
+        - ['/', 'queue2', 200, 300]
+        Wildcards '*' are accepted to monitor all vhosts and/or queues

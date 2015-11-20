@@ -1,0 +1,11 @@
+#!/usr/bin/python
+
+"""Amulet tests on a basic keystone deployment on precise-icehouse."""
+
+from basic_deployment import KeystoneBasicDeployment
+
+if __name__ == '__main__':
+    deployment = KeystoneBasicDeployment(series='precise',
+                                         openstack='cloud:precise-icehouse',
+                                         source='cloud:precise-updates/icehouse')
+    deployment.run_tests()

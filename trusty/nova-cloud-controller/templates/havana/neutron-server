@@ -1,0 +1,6 @@
+# havana
+###############################################################################
+# [ WARNING ]
+# Configuration file maintained by Juju. Local changes may be overwritten.
+###############################################################################
+NEUTRON_PLUGIN_CONFIG="{{ config }}"

@@ -1,0 +1,29 @@
+name: nova-hyperv
+summary: "OpenStack Hyper-V compute"
+maintainer: Gabriel Adrian Samfira <gsamfira@cloudbasesolutions.com>
+description: |
+ OpenStack Compute, codenamed Nova, is a cloud computing fabric controller. In
+ addition to its "native" API (the OpenStack API), it also supports the Amazon
+ EC2 API.
+tags:
+  - openstack
+provides:
+  cloud-compute:
+    interface: nova-compute
+  s2d:
+    interface: s2d-container
+    scope: container
+requires:
+  amqp:
+    interface: rabbitmq
+  image-service:
+    interface: glance
+  nova-ceilometer:
+    interface: nova-ceilometer
+  ad-join:
+    interface: ad-join
+peers:
+  compute-peer:
+    interface: nova
+  hyperv-peer:
+    interface: hyperv-peer

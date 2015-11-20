@@ -1,0 +1,11 @@
+#!/usr/bin/python
+# NeutronOVSBasicDeployment
+"""Amulet tests on a basic neutron-openvswitch deployment on trusty-kilo."""
+
+from basic_deployment import NeutronOVSBasicDeployment
+
+if __name__ == '__main__':
+    deployment = NeutronOVSBasicDeployment(series='trusty',
+                                           openstack='cloud:trusty-kilo',
+                                           source='cloud:trusty-updates/kilo')
+    deployment.run_tests()

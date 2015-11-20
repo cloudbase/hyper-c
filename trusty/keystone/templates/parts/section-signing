@@ -1,0 +1,13 @@
+[signing]
+{% if certfile -%}
+certfile = {{ certfile }}
+{% endif -%}
+{% if keyfile -%}
+keyfile = {{ keyfile }}
+{% endif -%}
+{% if ca_certs -%}
+ca_certs = {{ ca_certs }}
+{% endif -%}
+{% if ca_key -%}
+ca_key = {{ ca_key }}
+{% endif -%} 

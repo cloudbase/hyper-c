@@ -1,0 +1,6 @@
+# quantum
+###############################################################################
+# [ WARNING ]
+# Configuration file maintained by Juju. Local changes may be overwritten.
+###############################################################################
+QUANTUM_PLUGIN_CONFIG="{{ config }}"

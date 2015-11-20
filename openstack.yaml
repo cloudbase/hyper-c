@@ -1,0 +1,161 @@
+maas:
+  default: true
+  relations:
+  - - nova-hyperv
+    - nova-cloud-controller
+  - - nova-hyperv
+    - rabbitmq-server:amqp
+  - - nova-hyperv
+    - glance
+  - - nova-hyperv
+    - active-directory
+  - - nova-hyperv
+    - s2d
+  - - s2d-proxy
+    - s2d
+  - - s2d-proxy
+    - active-directory
+  - - keystone
+    - mysql
+  - - nova-cloud-controller
+    - glance
+  - - nova-cloud-controller
+    - keystone
+  - - nova-cloud-controller
+    - mysql
+  - - nova-cloud-controller
+    - rabbitmq-server
+  - - glance
+    - keystone
+  - - glance
+    - mysql
+  - - openstack-dashboard
+    - keystone
+  - - neutron-gateway
+    - mysql
+  - - neutron-gateway
+    - nova-cloud-controller
+  - - neutron-gateway:amqp
+    - rabbitmq-server
+  - - neutron-api
+    - mysql
+  - - neutron-api
+    - rabbitmq-server
+  - - neutron-api
+    - nova-cloud-controller
+  - - neutron-api
+    - neutron-openvswitch
+  - - neutron-openvswitch
+    - neutron-gateway
+  - - neutron-api
+    - neutron-gateway
+  - - neutron-api
+    - keystone
+  - - neutron-openvswitch
+    - rabbitmq-server
+  series: trusty
+  services:
+    active-directory:
+      charm: local:win2016/active-directory
+      branch: lp:cloudbaseit/active-directory
+      options:
+        default-administrator-password: Passw0rd
+        uninstall-password: Passw0rd
+        safe-mode-password: Passw0rd
+        default-domain-user: jujuadmin
+        default-domain-user-password: Passw0rd
+        domain-name: cloudbase.local
+      constraints: "tags=ad"
+    glance:
+      charm: local:trusty/glance
+      branch: lp:charms/glance
+      options:
+        openstack-origin: "cloud:trusty-liberty"
+      to: lxc:neutron-gateway
+    keystone:
+      branch: lp:charms/keystone
+      options:
+        admin-password: "Passw0rd"
+        admin-user: "cbsdemo"
+        openstack-origin: "cloud:trusty-liberty"
+        admin-token: "Passw0rd"
+      to: lxc:neutron-gateway
+    mysql:
+      charm: local:trusty/mysql
+      branch: lp:charms/mysql
+      to: lxc:neutron-gateway
+      options:
+        max-connections: 1000
+        tuning-level: fast
+    neutron-api:
+      charm: local:trusty/neutron-api
+      branch: lp:charms/neutron-api
+      options:
+        neutron-security-groups: True
+        overlay-network-type: "vxlan"
+        openstack-origin: "cloud:trusty-liberty"
+      to: lxc:neutron-gateway
+    neutron-gateway:
+      charm: local:trusty/neutron-gateway
+      branch: lp:charms/neutron-gateway
+      options:
+        # These are all the MAC addresses from all the nodes that are supposed to be
+        # used as EXTERNAL ports. You can find these ports in MaaS under node details
+        # Make sure you change this to match your environment.
+        ext-port: "52:54:00:7e:88:bd"
+        instance-mtu: 1450
+        openstack-origin: "cloud:trusty-liberty"
+        vlan-ranges: "physnet1:3200:3250"
+      constraints: "tags=services"
+    neutron-openvswitch:
+      charm: local:trusty/neutron-openvswitch
+      branch: lp:charms/neutron-openvswitch
+      options:
+        vlan-ranges: "physnet1:3200:3250"
+        # These are all the MAC addresses from all the nodes that are supposed to be
+        # used as data ports. You can find these ports in MaaS under node details
+        # Make sure you change this to match your environment.
+        data-port: "52:54:00:a3:15:9a"
+    nova-cloud-controller:
+      options:
+        network-manager: "Neutron"
+        openstack-origin: "cloud:trusty-liberty"
+      charm: local:trusty/nova-cloud-controller
+      branch: lp:charms/nova-cloud-controller
+      to: lxc:neutron-gateway
+    openstack-dashboard:
+      charm: local:trusty/openstack-dashboard
+      branch: lp:charms/openstack-dashboard
+      options:
+        openstack-origin: "cloud:trusty-liberty"
+      to: lxc:neutron-gateway
+    rabbitmq-server:
+      charm: local:trusty/rabbitmq-server
+      branch: lp:charms/rabbitmq-server
+      to: lxc:neutron-gateway
+    nova-hyperv:
+      num_units: 4
+      charm: local:win2016nano/nova-hyperv
+      branch: lp:cloudbaseit/nova-hyperv
+      options:
+        use-bonding: false
+        # These are all the MAC addresses from all the nodes that are supposed to be
+        # used as data ports. You can find these ports in MaaS under node details
+        # Make sure you change this to match your environment.
+        data-port: "3c:18:a0:05:cd:1c 3c:18:a0:05:cd:07 3c:18:a0:05:cd:22 3c:18:a0:05:cd:1e"
+        network-type: "hyperv"
+        openstack-version: "liberty"
+      constraints: "tags=nano"
+    s2d-proxy:
+      num_units: 1
+      charm: local:win2016/s2d-proxy
+      branch: lp:cloudbaseit/s2d-proxy
+      options:
+        #change this to an IP address that matches your environment
+        static-address: 192.168.2.9
+      #change this tag to match a node you want to target
+      constraints: "tags=glance"
+    s2d:
+      charm: local:win2016nano/s2d
+      branch: lp:cloudbaseit/s2d
+

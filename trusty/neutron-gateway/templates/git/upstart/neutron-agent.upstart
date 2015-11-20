@@ -1,0 +1,25 @@
+description "{{ service_description }}"
+author "Juju {{ service_name }} Charm <juju@localhost>"
+
+start on runlevel [2345]
+stop on runlevel [!2345]
+
+respawn
+
+chdir /var/run
+
+pre-start script
+  mkdir -p /var/run/neutron
+  chown neutron:root /var/run/neutron
+  # Check to see if openvswitch plugin in use by checking
+  # status of cleanup upstart configuration
+  if status neutron-ovs-cleanup; then
+    start wait-for-state WAIT_FOR=neutron-ovs-cleanup WAIT_STATE=running WAITER={{ process_name }}
+  fi
+end script
+
+exec start-stop-daemon --start --chuid neutron --exec {{ executable_name }} -- \
+     {% for config_file in config_files -%}
+     --config-file={{ config_file }} \
+     {% endfor -%}
+     --log-file={{ log_file }}

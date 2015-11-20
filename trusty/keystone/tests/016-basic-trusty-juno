@@ -1,0 +1,11 @@
+#!/usr/bin/python
+
+"""Amulet tests on a basic keystone deployment on trusty-juno."""
+
+from basic_deployment import KeystoneBasicDeployment
+
+if __name__ == '__main__':
+    deployment = KeystoneBasicDeployment(series='trusty',
+                                         openstack='cloud:trusty-juno',
+                                         source='cloud:trusty-updates/juno')
+    deployment.run_tests()

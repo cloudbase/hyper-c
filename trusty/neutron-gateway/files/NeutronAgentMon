@@ -1,0 +1,155 @@
+#!/bin/sh
+#
+#
+#	NeutronAgentMon OCF RA.
+#	Starts crm_mon in background which logs cluster status as
+#	html to the specified file.
+#
+#       Copyright 2014 Canonical Ltd.
+#
+#       Authors: Hui Xiang <hui.xiang@canonical.com>
+#                Edward Hope-Morley <edward.hope-morley@canonical.com>
+#
+# OCF instance parameters:
+#	OCF_RESKEY_file
+
+#######################################################################
+# Initialization:
+: ${OCF_FUNCTIONS=${OCF_ROOT}/resource.d/heartbeat/.ocf-shellfuncs}
+. ${OCF_FUNCTIONS}
+: ${__OCF_ACTION=$1}
+
+#######################################################################
+
+meta_data() {
+	cat <<END
+<?xml version="1.0"?>
+<!DOCTYPE resource-agent SYSTEM "ra-api-1.dtd">
+<resource-agent name="NeutronAgentMon">
+<version>1.0</version>
+
+<longdesc lang="en">
+This is a NeutronAgentMon Resource Agent.
+It monitors the 'neutron-ha-monitor daemon' status.
+</longdesc>
+<shortdesc lang="en">Monitor '/usr/local/bin/neutron-ha-monitor.py' in the background.</shortdesc>
+
+<parameters>
+
+<parameter name="file" unique="0">
+<longdesc lang="en">
+The file we want to run as a daemon.
+</longdesc>
+<shortdesc lang="en">The file we want to run as a daemon.</shortdesc>
+<content type="string" default="/usr/local/bin/neutron-ha-monitor.py" />
+</parameter>
+
+</parameters>
+
+<actions>
+<action name="start"   timeout="20" />
+<action name="stop"    timeout="20" />
+<action name="monitor" depth="0"  timeout="20" interval="60" />
+<action name="meta-data"  timeout="5" />
+<action name="validate-all"  timeout="30" />
+</actions>
+</resource-agent>
+END
+}
+
+#######################################################################
+
+NeutronAgentMon_usage() {
+	cat <<END
+usage: $0 {start|stop|monitor|validate-all|meta-data}
+
+Expects to have a fully populated OCF RA-compliant environment set.
+END
+}
+
+NeutronAgentMon_exit() {
+    if [ $1 != 0 ]; then
+        exit $OCF_ERR_GENERIC
+    else
+        exit $OCF_SUCCESS
+    fi
+}
+
+NeutronAgentMon_start() {
+    pid=`sudo ps -aux | grep neutron-ha-m\[o\]nitor.py | awk -F' ' '{print $2}'`
+    if [ -z $pid ]; then
+        ocf_log info "[NeutronAgentMon_start] Start Monitor daemon."
+        sudo mkdir -p /var/log/neutron-ha
+        sudo python /usr/local/bin/neutron-ha-monitor.py \
+        --config-file /var/lib/juju-neutron-ha/neutron-ha-monitor.conf \
+        --log-file /var/log/neutron-ha/monitor.log >> /dev/null 2>&1 & echo $!
+        sleep 5
+    else
+        ocf_log warn "[NeutronAgentMon_start] Monitor daemon already running."
+    fi
+    NeutronAgentMon_exit $?
+}
+
+NeutronAgentMon_stop() {
+    pid=`sudo ps -aux | grep neutron-ha-m\[o\]nitor.py | awk -F' ' '{print $2}'`
+    if [ ! -z $pid ]; then
+        sudo kill -s 9 $pid
+        ocf_log info "[NeutronAgentMon_stop] Pid $pid is killed."
+    else
+        ocf_log warn "[NeutronAgentMon_stop] Monitor daemon already stopped."
+    fi
+    NeutronAgentMon_exit 0
+}
+
+NeutronAgentMon_monitor() {
+    pid=`sudo ps -aux | grep neutron-ha-m\[o\]nitor.py | awk -F' ' '{print $2}'`
+    if [ ! -z $pid ]; then
+        ocf_log info "[NeutronAgentMon_monitor] success."
+        exit $OCF_SUCCESS
+    fi
+    exit $OCF_NOT_RUNNING
+}
+
+NeutronAgentMon_validate() {
+# Existence of the user
+    if [ -f $OCF_RESKEY_file ]; then
+        echo "Validate OK"
+        return $OCF_SUCCESS
+    else
+        ocf_log err "The file $OCF_RESKEY_file does not exist!"
+	exit $OCF_ERR_ARGS
+    fi
+}
+
+if [ $# -ne 1 ]; then
+    NeutronAgentMon_usage
+    exit $OCF_ERR_ARGS
+fi
+
+: ${OCF_RESKEY_update:="15000"}
+: ${OCF_RESKEY_pidfile:="/tmp/NeutronAgentMon_${OCF_RESOURCE_INSTANCE}.pid"}
+: ${OCF_RESKEY_htmlfile:="/tmp/NeutronAgentMon_${OCF_RESOURCE_INSTANCE}.html"}
+
+OCF_RESKEY_update=`expr $OCF_RESKEY_update / 1000`
+
+case $__OCF_ACTION in
+meta-data)	meta_data
+		exit $OCF_SUCCESS
+		;;
+start)		NeutronAgentMon_start
+		;;
+stop)		NeutronAgentMon_stop
+		;;
+monitor)	NeutronAgentMon_monitor
+		;;
+validate-all)	NeutronAgentMon_validate
+		;;
+usage|help)	NeutronAgentMon_usage
+		exit $OCF_SUCCESS
+		;;
+*)		NeutronAgentMon_usage
+		exit $OCF_ERR_UNIMPLEMENTED
+		;;
+esac
+
+exit $?

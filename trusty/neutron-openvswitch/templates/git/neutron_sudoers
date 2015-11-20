@@ -1,0 +1,4 @@
+Defaults:neutron !requiretty
+
+neutron ALL = (root) NOPASSWD: /usr/local/bin/neutron-rootwrap /etc/neutron/rootwrap.conf *
+

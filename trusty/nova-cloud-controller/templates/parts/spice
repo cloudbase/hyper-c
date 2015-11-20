@@ -1,0 +1,3 @@
+{% if html5proxy_base_url -%}
+html5proxy_base_url = {{ html5proxy_base_url }}
+{% endif -%}

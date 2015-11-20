@@ -1,0 +1,11 @@
+#!/usr/bin/python
+
+"""Amulet tests on a basic nova compute deployment on trusty-kilo."""
+
+from basic_deployment import NovaBasicDeployment
+
+if __name__ == '__main__':
+    deployment = NovaBasicDeployment(series='trusty',
+                                     openstack='cloud:trusty-kilo',
+                                     source='cloud:trusty-updates/kilo')
+    deployment.run_tests()

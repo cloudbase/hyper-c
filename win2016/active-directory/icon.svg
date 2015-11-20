@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!-- Generator: Adobe Illustrator 18.1.1, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [
+	<!ENTITY ns_extend "http://ns.adobe.com/Extensibility/1.0/">
+	<!ENTITY ns_ai "http://ns.adobe.com/AdobeIllustrator/10.0/">
+	<!ENTITY ns_graphs "http://ns.adobe.com/Graphs/1.0/">
+	<!ENTITY ns_vars "http://ns.adobe.com/Variables/1.0/">
+	<!ENTITY ns_imrep "http://ns.adobe.com/ImageReplacement/1.0/">
+	<!ENTITY ns_sfw "http://ns.adobe.com/SaveForWeb/1.0/">
+	<!ENTITY ns_custom "http://ns.adobe.com/GenericCustomNamespace/1.0/">
+	<!ENTITY ns_adobe_xpath "http://ns.adobe.com/XPath/1.0/">
+]>
+<svg version="1.1" id="Layer_1" xmlns:x="&ns_extend;" xmlns:i="&ns_ai;" xmlns:graph="&ns_graphs;"
+	 xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 158 158"
+	 style="enable-background:new 0 0 158 158;" xml:space="preserve">
+<metadata>
+	<sfw  xmlns="&ns_sfw;">
+		<slices></slices>
+		<sliceSourceBounds  x="-1414" y="-477.183" width="3929.498" height="516.183" bottomLeftOrigin="true"></sliceSourceBounds>
+	</sfw>
+</metadata>
+<linearGradient id="SVGID_1_" gradientUnits="userSpaceOnUse" x1="-1003.4482" y1="39" x2="-1002.4482" y2="39" gradientTransform="matrix(7.093660e-09 158 158 -7.093660e-09 -6082.9907 158544.7812)">
+	<stop  offset="0" style="stop-color:#ECECEC"/>
+	<stop  offset="0.0853" style="stop-color:#ECECEC"/>
+	<stop  offset="1" style="stop-color:#D9D9D9"/>
+</linearGradient>
+<path style="fill:url(#SVGID_1_);" d="M0,106.757V51.243C0,6.405,6.399,0,51.19,0h55.62C151.601,0,158,6.405,158,51.243v55.514
+	c0,44.838-6.399,51.243-51.19,51.243H51.19C6.399,158,0,151.595,0,106.757z"/>
+<rect x="110.142" y="39.916" style="fill:#003CA6;" width="5.042" height="18.487"/>
+<rect x="110.142" y="65.838" style="fill:#003CA6;" width="5.042" height="18.487"/>
+<rect x="110.142" y="91.76" style="fill:#003CA6;" width="5.042" height="18.487"/>
+<path style="fill:#003CA6;" d="M49.071,36.5v85h59.577v-85H49.071z M78.952,56.996c5.229,0,9.338,4.421,9.338,10.047
+	s-4.109,10.047-9.338,10.047c-5.229,0-9.338-4.421-9.338-10.047S73.723,56.996,78.952,56.996z M96.135,95.98H61.77v-5.024
+	c0-6.631,5.043-11.856,11.019-11.856h12.14c5.416,0,11.206,4.823,11.206,10.65V95.98z"/>
+</svg>

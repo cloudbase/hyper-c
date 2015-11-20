@@ -1,0 +1,27 @@
+name: openstack-dashboard
+summary: a Django web interface to OpenStack
+maintainer: Adam Gandelman <adamg@canonical.com>
+description: |
+ The OpenStack Dashboard provides a full feature web interface for interacting
+ with instances, images, volumes and networks within an OpenStack deployment.
+tags:
+  - openstack
+  - misc
+provides:
+  nrpe-external-master:
+    interface: nrpe-external-master
+    scope: container
+  website:
+    interface: http
+  dashboard-plugin:
+    interface: dashboard-plugin
+    scope: container
+requires:
+  identity-service:
+    interface: keystone
+  ha:
+    interface: hacluster
+    scope: container
+peers:
+  cluster:
+    interface: openstack-dashboard-ha
