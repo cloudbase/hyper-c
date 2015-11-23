@@ -84,6 +84,7 @@ $Charms = @{
         "num_units" = 4;
         "config" = $true;
         "subordonate" = $false;
+        "tags"="nano";
     };
     "local:win2016/s2d-proxy" = @{
         "num_units" = 1;
@@ -92,7 +93,7 @@ $Charms = @{
         "tags" = "s2d-proxy";
     };
     "local:win2016nano/s2d" = @{
-        "config" = $true;
+        "config" = $false;
         "subordonate" = $true;
     };
 }
@@ -133,6 +134,30 @@ function Deploy-Charm{
         [Parameter(Mandatory=$true)]
         [System.Object]$Options
     )
+    $cleanName = $Name.Split("/")[-1]
+    $checkCharm = juju.exe status --format json
+    $cjs = ConvertFrom-Json $checkCharm
+    
+    if($cjs.services.$cleanName){
+        if(!$options["subordonate"]){
+            $unitCount = ($cjs.services.$cleanName.units | Get-Member -MemberType *Property).Count
+            if($unitCount -lt $options["num_units"]){
+                $newUnits = $options["num_units"] - $unitCount
+                Write-Host "Adding $newUnits more units"
+                juju.exe add-unit $cleanName -n $newUnits
+                if($LASTEXITCODE){
+                    Throw "Failed to run juju.exe"
+                }
+            }else{
+                Write-Host "Charm $cleanName already deployed"
+            }
+            return
+        }else{
+            Write-Host "Charm $cleanName already deployed"
+            return
+        }
+    }
+    
     $cmd = @("juju.exe", "deploy", "$Name")
     if($Options["config"]){
         $cmd += "--config","$Config"
@@ -151,11 +176,31 @@ function Deploy-Charm{
     if($Options["to"] -and !$Options["subordonate"]){
         $to = $Options["to"]
         if ($to.StartsWith("lxc:")){
-            $ret = juju.exe add-machine $to
+            Write-Host ("sending $name to" + ($to[4..$to.Length] -Join ""))
+            $services = juju.exe status ($to[4..$to.Length] -Join "") --format json
             if($LASTEXITCODE){
                 Throw "Failed to run juju.exe"
             }
-            $id = $ret.split()[-1]
+            $js = ConvertFrom-Json $services
+            $members = ($js.machines | Get-Member -MemberType *property).Name
+            foreach ($i in $members){
+                $tmpCmd = $cmd
+                Write-Host "Adding machine lxc:$i"
+                $ret = juju.exe add-machine ("lxc:" + $i) 2>&1
+                if($LASTEXITCODE){
+                    Throw "Failed to run juju.exe"
+                }
+                $id = $ret.TargetObject.split()[-1]
+                Write-Host ("Got ID : " + $id)
+                $tmpCmd += "--to","$id"
+                & $tmpCmd[0] $tmpCmd[1..$tmpCmd.Length]
+                if ($LASTEXITCODE){
+                    Throw "Failed to run juju.exe"
+                }
+            }
+            return $true
+        }else{
+            $id = $to
         }
         $cmd += "--to","$id"
     }
