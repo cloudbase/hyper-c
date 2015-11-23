@@ -133,26 +133,36 @@ function Deploy-Charm{
         [Parameter(Mandatory=$true)]
         [System.Object]$Options
     )
-    $cmd = "juju.exe deploy $Name"
+    $cmd = @("juju.exe", "deploy", "$Name")
     if($Options["config"]){
-        $cmd += " --config $Config"
+        $cmd += "--config","$Config"
     }
     if (!$Options["subordonate"] -and $Options["num_units"]){
         $units = $Options["num_units"]
-        $cmd += " -n $units"
+        $cmd += "-n","$units"
     }
     if($Options["tags"] -and $Options["to"]){
         Throw "Conflicting placement options for $name : to and tags"
     }
     if($Options["tags"] -and !$Options["subordonate"]){
         $tag = $Options["tags"]
-        $cmd += " --constraints tags=$tag"
+        $cmd += "--constraints","tags=$tag"
     }
     if($Options["to"] -and !$Options["subordonate"]){
         $to = $Options["to"]
-        $cmd += " --to $to"
+        if ($to.StartsWith("lxc:")){
+            $ret = juju.exe add-machine $to
+            if($LASTEXITCODE){
+                Throw "Failed to run juju.exe"
+            }
+            $id = $ret.split()[-1]
+        }
+        $cmd += "--to","$id"
     }
-    & $cmd
+    & $cmd[0] $cmd[1..$cmd.Length]
+    if ($LASTEXITCODE){
+        Throw "Failed to run juju.exe"
+    }
 }
 
 function Deploy-TaggedCharms {
