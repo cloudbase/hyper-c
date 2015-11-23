@@ -1,6 +1,6 @@
 Param(
     [Parameter(Mandatory=$true)]
-    [string]$Config
+    [string]$Config,
     [string]$CharmRepository
 )
 
@@ -27,74 +27,74 @@ $Charms = @{
         "config" = $true;
         "subordonate" = $false;
         "tags" = "ad";
-    },
+    };
     "local:trusty/glance" = @{
         "num_units" = 1;
         "config" = $true;
         "subordonate" = $false;
         "to" = "lxc:neutron-gateway";
-    },
+    };
     "local:trusty/keystone" = @{
         "num_units"=1;
         "config" = $true;
         "subordonate" = $false;
         "to" = "lxc:neutron-gateway";
-    },
+    };
     "local:trusty/mysql" = @{
         "num_units" = 1;
         "config" = $true;
         "subordonate" = $false;
         "to" = "lxc:neutron-gateway";
-    },
+    };
     "local:trusty/rabbitmq-server" = @{
         "num_units" = 1;
         "config" = $false;
         "subordonate" = $false;
         "to" = "lxc:neutron-gateway";
-    },
+    };
     "local:trusty/neutron-api" = @{
         "num_units" = 1;
         "config" = $true;
         "subordonate" = $false;
         "to" = "lxc:neutron-gateway";
-    },
+    };
     "local:trusty/neutron-gateway" = @{
         "num_units" = 1;
         "config" = $true;
         "subordonate" = $false;
         "tags" = "services";
-    },
+    };
     "local:trusty/neutron-openvswitch" = @{
         "config" = $true;
         "subordonate" = $true;
-    },
+    };
     "local:trusty/nova-cloud-controller" = @{
         "num_units" = 1;
         "config" = $true;
         "subordonate" = $false;
         "to" = "lxc:neutron-gateway";
-    },
+    };
     "local:trusty/openstack-dashboard" = @{
         "num_units" = 1;
         "config" = $true;
         "subordonate" = $false;
         "to" = "lxc:neutron-gateway";
-    },
+    };
     "local:win2016nano/nova-hyperv" = @{
         "num_units" = 4;
         "config" = $true;
         "subordonate" = $false;
-    },
+    };
     "local:win2016/s2d-proxy" = @{
         "num_units" = 1;
         "config" = $true;
         "subordonate" = $false;
         "tags" = "s2d-proxy";
-    },
+    };
     "local:win2016nano/s2d" = @{
         "config" = $true;
         "subordonate" = $true;
-    }
+    };
 }
 
 $relations = @(
@@ -129,7 +129,7 @@ $relations = @(
 function Deploy-Charm{
     Param(
         [Parameter(Mandatory=$true)]
-        [string]$Name
+        [string]$Name,
         [Parameter(Mandatory=$true)]
         [System.Object]$Options
     )
@@ -142,7 +142,7 @@ function Deploy-Charm{
         $cmd += " -n $units"
     }
     if($Options["tags"] -and $Options["to"]){
-        Throw "Conflicting placement options for $name: to and tags"
+        Throw "Conflicting placement options for $name : to and tags"
     }
     if($Options["tags"] -and !$Options["subordonate"]){
         $tag = $Options["tags"]
