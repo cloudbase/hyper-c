@@ -186,10 +186,16 @@ function Deploy-Charm{
             foreach ($i in $members){
                 $tmpCmd = $cmd
                 Write-Host "Adding machine lxc:$i"
+                # nasty hack. If ErrorActionPreference is stop, when
+                # redirecting stderr to stdout in powershell, the error
+                # code becomes -1 and powershell stops execution
+                $ErrorActionPreference = "continue"
                 $ret = juju.exe add-machine ("lxc:" + $i) 2>&1
                 if($LASTEXITCODE){
+                    $ErrorActionPreference = "stop"
                     Throw "Failed to run juju.exe"
                 }
+                $ErrorActionPreference = "stop"
                 $id = $ret.TargetObject.split()[-1]
                 Write-Host ("Got ID : " + $id)
                 $tmpCmd += "--to","$id"
