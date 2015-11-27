@@ -376,8 +376,32 @@ function Get-JujuUnit {
     }
 }
 
+function Validate-IP {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$ip
+    )
+    return ($ip -as [ipaddress]) -as [bool]
+}
+
 function Get-JujuUnitPrivateIP {
-    return Get-JujuUnit -Attr "private-address"
+    $addr = Get-JujuUnit -Attr "private-address"
+    if((Validate-IP $addr)){
+        return $addr
+    }
+    $ip = ExecuteWith-Retry {
+        ipconfig /flushdns
+        if($LASTEXITCODE){
+            juju-log.exe "failed to flush dns"
+            Throw "Failed to flush DNS"
+        }
+        $ip = ([system.net.dns]::GetHostAddresses($addr))[0].ipaddresstostring
+        return $ip
+    }
+    if(!$ip){
+        Throw "Could not get private address"
+    }
+    return $ip
 }
 
 function Get-JujuRelationParams {

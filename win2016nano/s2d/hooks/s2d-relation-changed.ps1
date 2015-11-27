@@ -9,14 +9,10 @@ $ErrorActionPreference = "Stop"
 
 try {
     Import-Module -DisableNameChecking CharmHelpers
+    $modulePath = "$PSScriptRoot\hooks.psm1"
+    Import-Module -Force -DisableNameChecking $modulePath
 
-    $isInDomain = (gcim Win32_ComputerSystem).PartOfDomain
-    if($isInDomain){
-        $relation_settings = @{"ready"="True"; "computername"=$env:COMPUTERNAME;}
-    }else{
-        $relation_settings = @{"ready"="False"; "computername"=$env:COMPUTERNAME;}
-    }
-    $ret = relation_set -relation_settings $relation_settings
+    Run-S2DRelationChanged
 }catch{
     juju-log.exe "Failed to run amqp-relation-joined: $_"
     exit 1

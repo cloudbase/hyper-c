@@ -342,7 +342,19 @@ function Get-JujuUnitPrivateIP {
     if((Validate-IP $addr)){
         return $addr
     }
-    return ([system.net.dns]::GetHostAddresses($addr))[0].ipaddresstostring
+    $ip = ExecuteWith-Retry {
+        ipconfig /flushdns
+        if($LASTEXITCODE){
+            juju-log.exe "failed to flush dns"
+            Throw "Failed to flush DNS"
+        }
+        $ip = ([system.net.dns]::GetHostAddresses($addr))[0].ipaddresstostring
+        return $ip 
+    }
+    if(!$ip){
+        Throw "Could not get private address"
+    }
+    return $ip
 }
 
 function Get-JujuRelationParams {

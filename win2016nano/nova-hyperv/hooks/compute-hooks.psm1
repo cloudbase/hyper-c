@@ -293,7 +293,8 @@ function Charm-Services {
                 "Get-NeutronContext",
                 "Get-GlanceContext",
                 "Get-CharmConfigContext",
-                "Get-SystemContext"
+                "Get-SystemContext",
+                "Get-S2DContainerContext"
                 );
         };
         "neutron"=@{
@@ -307,7 +308,8 @@ function Charm-Services {
                 "Get-RabbitMQContext",
                 "Get-NeutronContext",
                 "Get-CharmConfigContext",
-                "Get-SystemContext"
+                "Get-SystemContext",
+                "Get-S2DContainerContext"
                 );
         };
         "neutron-ovs"=@{
@@ -321,7 +323,8 @@ function Charm-Services {
                 "Get-NeutronContext",
                 "Get-RabbitMQContext",
                 "Get-CharmConfigContext",
-                "Get-SystemContext"
+                "Get-SystemContext",
+                "Get-S2DContainerContext"
                 );
         };
     }
@@ -384,21 +387,46 @@ function Get-NeutronUrl {
 }
 
 
+function Get-S2DContainerContext {
+    $instancesDir = (charm_config -scope 'instances-dir').Replace('/', '\')
+    $ctx = @{
+        "instances_dir"=$instancesDir;
+    }
+    $rids = relation_ids -reltype "s2d"
+    foreach ($rid in $rids){
+        $units = related_units -relid $rid
+        foreach ($unit in $units){
+            $volumePath = relation_get -attr 's2dvolpath' -rid $rid -unit $unit
+            juju-log.exe ">>> $volumePath"
+            if($volumePath){
+                $ctx["instances_dir"] = $volumePath.Replace('/', '\')
+                if(!(Test-Path $volumePath)){
+                    # Got s2dvolpath from relation, but its not actually present
+                    # on disk. Not setting this to instances dir as it will fail
+                    continue
+                }
+                $ctx["instances_dir"] = $volumePath.Replace('/', '\')
+                juju-log.exe ("<<<<" + $ctx["instances_dir"])
+                return $ctx
+            }
+        }
+    }
+    # If we get here, it means there was no s2dvolpath
+    if (!(Test-Path $ctx["instances_dir"])){
+        mkdir $ctx["instances_dir"]
+    }
+    return $ctx
+}
+
 function Get-NeutronContext {
     Write-JujuLog "Generating context for Neutron"
 
     $logdir = (charm_config -scope 'log-dir').Replace('/', '\')
-    $instancesDir = (charm_config -scope 'instances-dir').Replace('/', '\')
     $logdirExists = Test-Path $logdir
-    $instancesExist = Test-Path $instancesDir
     $switchName = Juju-GetVMSwitch
 
     if (!$logdirExists){
         mkdir $logdir
-    }
-
-    if (!$instancesExist){
-        mkdir $instancesDir
     }
 
     $ctx = @{
@@ -411,7 +439,6 @@ function Get-NeutronContext {
         "neutron_admin_username"=$null;
         "neutron_admin_password"=$null;
         "log_dir"=$logdir;
-        "instances_dir"=$instancesDir;
         "vmswitch_name"=$switchName;
     }
 
@@ -471,6 +498,9 @@ function Get-CharmConfigContext {
     $asHash = @{}
     foreach ($i in $config.GetEnumerator()){
         $name = $i.Key
+        if($name -eq "instances-dir"){
+            continue
+        }
         if($i.Value.Gettype() -is [System.String]){
             $v = ($i.Value).Replace('/', '\')
         }else{
@@ -857,6 +887,9 @@ function Install-NovaFromZip {
     $files = Join-Path $env:CHARM_DIR "files"
     $policyFile = Join-Path $files "policy.json"
     $novaDir = Get-NovaDir
+    if((Test-Path $novaDir)){
+        rm -Recurse -Force $novaDir
+    }
     $configDir = Join-Path $novaDir "etc"
     Extract-FromZip -Archive $InstallerPath -Destination $novaDir
     if (!(Test-Path $configDir)){
