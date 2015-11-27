@@ -585,18 +585,6 @@ function Prepare-ADInstall {
         Write-JujuError "Failed to install Windows features." -Fatal $true
     }
 
-    $nameservers = Get-PrimaryAdapterDNSServers
-    $netadapter = Get-MainNetadapter
-
-    if ($nameservers) {
-        if (!("127.0.0.1" -in $nameservers)) {
-            $nameservers = ,"127.0.0.1" + $nameservers
-        }
-        Set-DnsClientServerAddress -InterfaceAlias $netadapter `
-            -ServerAddresses $nameservers
-    }
-    Add-DNSForwarders
-
     Write-JujuLog "Finished preparing AD install."
 }
 
@@ -1025,6 +1013,17 @@ function Win-Peer {
 }
 
 function Finish-Install {
+    $nameservers = Get-PrimaryAdapterDNSServers
+    $netadapter = Get-MainNetadapter
+
+    if ($nameservers) {
+        if (!("127.0.0.1" -in $nameservers)) {
+            $nameservers = ,"127.0.0.1" + $nameservers
+        }
+        Set-DnsClientServerAddress -InterfaceAlias $netadapter `
+            -ServerAddresses $nameservers
+    }
+    Add-DNSForwarders
     Open-DCPorts
     Set-JujuStatus -Status "active"
 }
