@@ -343,7 +343,7 @@ function Get-JujuUnitPrivateIP {
         return $addr
     }
     $ip = ExecuteWith-Retry {
-        ipconfig /flushdns
+        ipconfig /flushdns | Out-Null
         if($LASTEXITCODE){
             juju-log.exe "failed to flush dns"
             Throw "Failed to flush DNS"
@@ -354,6 +354,7 @@ function Get-JujuUnitPrivateIP {
     if(!$ip){
         Throw "Could not get private address"
     }
+    juju-log.exe ">>> Returning $ip"
     return $ip
 }
 
