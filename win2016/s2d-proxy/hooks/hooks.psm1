@@ -52,7 +52,7 @@ function Add-NodesToCluster {
     foreach ($node in $nodes) {
         $isAdded = Get-ClusterNode -Name $node.ToString() -Cluster ($clusterName + "." + $fqdn) -ErrorAction SilentlyContinue
         if (!$isAdded) {
-            Add-ClusterNode -Name $node.ToString() -Cluster $clusterName
+            Add-ClusterNode -Name $node.ToString() -Cluster $clusterName -NoStorage
         }
     }
     return $true
@@ -117,7 +117,6 @@ function Create-S2DVolume {
     return $true
 }
 
-
 function Enable-ScaleOutFileServer {
     $node = (Get-ClusterNode -Cluster $clusterName).name[0]
     $session = New-CimSession -ComputerName $node
@@ -132,6 +131,29 @@ function Enable-ScaleOutFileServer {
                           -HostName $scaleoutname -Protocols SMB -CimSession $session
     Remove-CimSession $session
     return $true
+}
+
+function Broadcast-VolumeCreated {
+    $node = (Get-ClusterNode -Cluster $clusterName).name[0]
+    $session = New-CimSession -ComputerName $node
+    
+    $virtualDisk = Get-VirtualDisk -CimSession $session -FriendlyName $volumeName -ErrorAction SilentlyContinue
+    if(!$virtualDisk){
+        juju-log.exe "Volume not created yet"
+        return $false
+    }
+    $path = ($virtualDisk | Get-Disk | Get-Partition | Where-Object {$_.Type -eq "Basic"}).AccessPaths[0]
+    $relation_set = @{
+        "volumepath"=$path.Replace('\', '/');
+    }
+
+    $rids = relation_ids -reltype "s2d"
+    foreach ($rid in $rids){
+        $ret = relation_set -relation_id $rid -relation_settings $relation_set
+        if ($ret -eq $false){
+            Write-JujuError "Failed to set s2d relation" -Fatal $false
+        }
+    }
 }
 
 function Run-S2DRelationChanged {
@@ -195,6 +217,7 @@ function Run-S2DRelationChanged {
     ExecuteWith-Retry {
         Enable-ScaleOutFileServer
     } -RetryInterval 10 -MaxRetryCount 10
+    Broadcast-VolumeCreated
 }
 
 function Run-SetKCD {

@@ -14,6 +14,24 @@ function Clear-AllDisks {
     Clear-Disk -Number 1 -RemoveOEM -Confirm:$false
 }
 
+function Run-S2DRelationChanged {
+    $volumePath = relation_get -attr "volumepath" 
+    if(!$volumePath){
+        return $false
+    }
+    $relation_set = @{
+        "s2dvolpath"=$volumePath;
+    }
+    $relations = relation_ids -reltype 's2d-container'
+    foreach($rid in $relations){
+        $ret = relation_set -relation_id $rid -relation_settings $relation_set
+        if ($ret -eq $false){
+            Write-JujuError "Failed to set s2d relation" -Fatal $false
+        }
+    }
+    
+}
+
 function Broadcast-Ready {
     $ready = $false
     $relations = relation_ids -reltype 's2d-container'
