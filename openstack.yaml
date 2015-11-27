@@ -65,7 +65,7 @@ maas:
         default-domain-user: jujuadmin
         default-domain-user-password: Passw0rd
         domain-name: cloudbase.local
-      constraints: "tags=ad"
+      constraints: "tags=addc"
     glance:
       charm: local:trusty/glance
       branch: lp:charms/glance
