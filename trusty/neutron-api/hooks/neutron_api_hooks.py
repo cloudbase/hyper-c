@@ -6,6 +6,8 @@ from subprocess import (
     check_call,
 )
 
+from charmhelpers.contrib.python.packages import pip_install
+
 from charmhelpers.core.hookenv import (
     Hooks,
     UnregisteredHookError,
@@ -43,6 +45,7 @@ from charmhelpers.contrib.openstack.utils import (
     os_requires_version,
     os_release,
     sync_db_with_multi_ipv6_addresses,
+    get_os_codename_install_source,
 )
 
 from neutron_api_utils import (
@@ -173,6 +176,11 @@ def install():
 def config_changed():
     # If neutron is ready to be queried then check for incompatability between
     # existing neutron objects and charm settings
+    codename = get_os_codename_install_source(config('openstack-origin'))
+    if codename >= 'kilo':
+        branch = "stable/%s" % codename
+        pip_install("git+https://github.com/openstack/networking-hyperv.git@%s" % branch)
+
     if neutron_ready():
         if l3ha_router_present() and not get_l3ha():
             e = ('Cannot disable Router HA while ha enabled routers exist.'
