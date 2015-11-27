@@ -65,7 +65,7 @@ maas:
         default-domain-user: jujuadmin
         default-domain-user-password: Passw0rd
         domain-name: cloudbase.local
-      constraints: "tags=ad"
+      constraints: "tags=addc"
     glance:
       charm: local:trusty/glance
       branch: lp:charms/glance
@@ -151,10 +151,17 @@ maas:
       charm: local:win2016/s2d-proxy
       branch: lp:cloudbaseit/s2d-proxy
       options:
-        #change this to an IP address that matches your environment
+        # Change this to an IP address that matches your environment.
+        # This IP address should be in the same network as the IP addresses
+        # you configured your MaaS cluster to assign to your nodes. Make sure
+        # that this IP cannot be allocated to any other node. This can be done
+        # by leaving a few IP addresses out of the static and dynamic ranges MaaS
+        # allocates from.
+        # For example: 192.168.2.10-192.168.2.100 where 192.168.2.0-192.168.2.9
+        # are left for you to decide where to allocate them.
         static-address: 192.168.2.9
       #change this tag to match a node you want to target
-      constraints: "tags=glance"
+      constraints: "tags=s2d-proxy"
     s2d:
       charm: local:win2016nano/s2d
       branch: lp:cloudbaseit/s2d
