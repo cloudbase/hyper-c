@@ -44,12 +44,22 @@ function Add-NodesToCluster {
     Flush-DNS
     try {
         $cluster = Get-Cluster -Name $clusterName -Domain $fqdn
+        if (!$cluster){
+            juju-log.exe "Warning: Cluster not initialized"
+            juju-log.exe "Delaying Add-ClusterNode"
+            return $false
+        }
     }catch{
         juju-log.exe "Warning: Cluster not initialized"
         juju-log.exe "Delaying Add-ClusterNode"
         return $false
     }
     foreach ($node in $nodes) {
+        $isInAD = Get-ADComputer -Name $node -ErrorAction SilentlyContinue
+        if(!$isInAD){
+            juju-log.exe "Node $node is not in AD yet."
+            return $false
+        }
         $isAdded = Get-ClusterNode -Name $node.ToString() -Cluster ($clusterName + "." + $fqdn) -ErrorAction SilentlyContinue
         if (!$isAdded) {
             juju-log.exe "Trying to add $node"
