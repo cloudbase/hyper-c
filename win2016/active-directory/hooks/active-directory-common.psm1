@@ -1297,6 +1297,9 @@ function Create-DjoinData {
         }
         Throw "Error provisioning machine: $LastExitCode"
     }
+    $c = Get-ADComputer $computername
+    $c | Rename-ADObject -NewName $c.Name.ToLower()
+
     $blob = ConvertFile-ToBase64 $blobFile
     $ret = SetBlob-ToLeader -Node $computername -Blob $blob
     $ret = rm -Force $blobFile
