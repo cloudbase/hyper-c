@@ -55,7 +55,7 @@ function Add-NodesToCluster {
         return $false
     }
     foreach ($node in $nodes) {
-        $isInAD = Get-ADComputer -Name $node -ErrorAction SilentlyContinue
+        $isInAD = Get-ADComputer $node -ErrorAction SilentlyContinue
         if(!$isInAD){
             juju-log.exe "Node $node is not in AD yet."
             return $false
@@ -120,7 +120,7 @@ function Create-S2DVolume {
 
     $pool = Get-StoragePool -CimSession $session -FriendlyName $storagePool
     # TODO: This is not correnct. Need to find the proper way to do this
-    $maxSize = ($pool.Size/2-$pool.AllocatedSize)
+    $maxSize = (($pool.Size-$pool.AllocatedSize)/2-3GB)
     $vol = New-Volume -StoragePool $pool -FriendlyName $volumeName -PhysicalDiskRedundancy 1 -FileSystem CSVFS_REFS -Size $maxSize -CimSession $session
 
     Set-FileIntegrity $vol.Path -Enable $false -CimSession $session
@@ -190,8 +190,19 @@ function Run-S2DRelationChanged {
                 continue
             }
             $ready = relation_get -attr "ready" -rid $rid -unit $unit
+            juju-log.exe "Unit $unit has reaty state set to: $ready"
             if(!$ready){
                 juju-log.exe "Node $private_address is not yet ready"
+                continue
+            }
+            try{
+                $isInAD = Get-ADComputer $computername -ErrorAction SilentlyContinue
+                if(!$isInAD){
+                    juju-log.exe "Node $computername is not yet in AD"
+                    continue
+                }
+            } catch {
+                juju-log.exe "Node $computername is not yet in AD"
                 continue
             }
             $nodes += $computername
