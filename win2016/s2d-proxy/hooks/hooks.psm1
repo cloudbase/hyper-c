@@ -52,6 +52,7 @@ function Add-NodesToCluster {
     foreach ($node in $nodes) {
         $isAdded = Get-ClusterNode -Name $node.ToString() -Cluster ($clusterName + "." + $fqdn) -ErrorAction SilentlyContinue
         if (!$isAdded) {
+            juju-log.exe "Trying to add $node"
             Add-ClusterNode -Name $node.ToString() -Cluster $clusterName -NoStorage
         }
     }
@@ -222,6 +223,9 @@ function Run-S2DRelationChanged {
 
 function Run-SetKCD {
     $name = relation_get -attr "computername"
+    if(!$name){
+        return $false
+    }
     $charm_dir = charm_dir
 
     $relations = relation_ids -reltype 's2d'
