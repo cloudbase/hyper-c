@@ -142,7 +142,8 @@ def config_changed():
         charm_folder = charm_dir()
         theme_path = os.path.join(charm_folder, "files/openstack-dashboard-cloudbase-theme_1.1-1.deb")
         if os.path.isfile(theme_path):
-            subprocess.check_call(["dpkg", -i, theme_path])
+            subprocess.check_call(["dpkg", "-i", theme_path])
+            subprocess.check_call(["/etc/init.d/memcached", "restart"])
     except Exception as err:
         log("Failed to install theme: %s" % err)
     
