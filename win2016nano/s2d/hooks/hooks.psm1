@@ -8,7 +8,7 @@ import-module Microsoft.PowerShell.Utility
 $ErrorActionPreference = "Stop"
 
 Import-Module -Force -DisableNameChecking CharmHelpers
-
+$computername = [System.Net.Dns]::GetHostName()
 
 function Clear-AllDisks {
     Clear-Disk -Number 1 -RemoveOEM -Confirm:$false
@@ -49,7 +49,7 @@ function Broadcast-Ready {
         return $false
     }
     $relation_set = @{
-        "computername"=$env:COMPUTERNAME; 
+        "computername"=$computername; 
         'ready'="True";
     }
 

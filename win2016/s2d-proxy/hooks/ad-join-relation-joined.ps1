@@ -5,14 +5,16 @@
 # we want to exit on error
 $ErrorActionPreference = "Stop"
 
+$computername = [System.Net.Dns]::GetHostName()
+
 Import-Module -DisableNameChecking CharmHelpers
 Import-Module -Force -DisableNameChecking "$psscriptroot\active-directory.psm1"
 
 $adUser = Get-AdUserAndGroup
 
 $relation_set = @{
-    'adusers'=$adUser;
-    'computername'=$env:COMPUTERNAME;
+    'adusers' = $adUser;
+    'computername' = $computername;
 }
 
 $rids = relation_ids -reltype "ad-join"

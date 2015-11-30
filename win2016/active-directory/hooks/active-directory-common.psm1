@@ -2,6 +2,7 @@
 # Copyright 2014-2015 Cloudbase Solutions Srl
 #
 $ErrorActionPreference = 'Stop'
+$computername = [System.Net.Dns]::GetHostName()
 
 $charmHelpers = Join-Path $PSScriptRoot "Modules\CharmHelpers"
 Import-Module -Force -DisableNameChecking $charmHelpers
@@ -105,7 +106,7 @@ function Check-Membership {
     )
 
     if (!$Domain) {
-        $Domain = $env:computername
+        $Domain = $computername
     }
     $group = Get-CimInstance -ClassName Win32_Group  `
                 -Filter "SID = '$GroupSID'"
@@ -295,13 +296,13 @@ function Normalize-User {
     $splitUser = $User.Split("\")
     if ($splitUser.length -eq 2) {
         if ($splitUser[0] -eq ".") {
-            $domain = $env:COMPUTERNAME
+            $domain = $computername
         } else {
             $domain = $splitUser[0]
         }
         $u = $splitUser[1]
     } else {
-        $domain = $env:COMPUTERNAME
+        $domain = $computername
         $u = $User
     }
     return @($domain, $u)
@@ -324,7 +325,7 @@ function AddTo-LocalGroup {
 
     if (!$isMember) {
         $objUser = [ADSI]("WinNT://$domain/$user")
-        $objGroup = [ADSI]("WinNT://$env:COMPUTERNAME/$groupName")
+        $objGroup = [ADSI]("WinNT://$computername/$groupName")
         try {
             $objGroup.PSBase.Invoke("Add",$objUser.PSBase.Path)
         } catch {
@@ -444,7 +445,7 @@ function Create-ServicesUsers {
 
     Write-JujuLog "Creating AD Users for active-directory DC...."
 
-    $machineName = $env:ComputerName
+    $machineName = $computername
     $domain = Get-DomainName $ADparams["ad_domain"]
     $adminUsername = $ADparams["ad_username"]
     $adminPassword = $ADparams["ad_password"]
@@ -617,7 +618,7 @@ function Install-ADForest {
     $domainName = Get-DomainName $fullDomainName
     if (Is-DomainInstalled $fullDomainName) {
         Write-JujuLog "AD is already installed."
-        $dcName = $env:ComputerName
+        $dcName = $computername
         Add-UserToDomainAdmins $localAdministrator $defaultAdministratorPassword $domainName `
             $dcName $defaultDomainUser
         return
@@ -674,7 +675,7 @@ function Add-DNSForwarders {
         return
     }
     ExecuteWith-Retry {
-        $hostname = $env:COMPUTERNAME
+        $hostname = $computername
         Execute-ExternalCommand {
             dnscmd.exe $hostname /resetforwarders $nameservers
         }
@@ -943,7 +944,7 @@ function Set-Availability {
 
     $relation_set = @{
         'address' = $privateAddress;
-        'hostname' = $env:computername;
+        'hostname' = $computername;
         'username' = $user;
         'password' = $password;
         'domainName' = $fullDomainName;
@@ -1029,7 +1030,7 @@ function Finish-Install {
 }
 
 function Uninstall-ActiveDomainController {
-    $hostname = $env:COMPUTERNAME
+    $hostname = $computername
     $fullDomainName = Get-JujuCharmConfig -Scope 'domain-name'
     $user = Get-DefaultLocalAdministrator
     $password = Get-JujuCharmConfig -Scope 'default-administrator-password'
@@ -1079,7 +1080,7 @@ function Destroy-ADDomain {
     Param()
 
     Write-JujuLog "Started destroying AD Domain..."
-    $hostname = $env:COMPUTERNAME
+    $hostname = $computername
 
     $fullDomainName = Get-JujuCharmConfig -Scope 'domain-name'
     if (!(Is-DomainInstalled $fullDomainName)) {
@@ -1430,13 +1431,13 @@ function Run-LeaderElectedHook {
     $isFormerLeader = $false
     $leaderHostname = Get-LeaderData -Attr "active-leader"
     Write-JujuLog "Leader hostname: $leaderHostname"
-    if (!$leaderHostname -or ($leaderHostname -eq $ENV:ComputerName)) {
+    if (!$leaderHostname -or ($leaderHostname -eq $computername)) {
         Write-JujuLog "This unit is the first or former leader"
         $isFormerLeader = $true
     }
     $alreadyRunningLeaderElected = (Get-CharmState "AD" "RunningLeaderElectedHook") -eq "True"
     if ($isLeader) {
-        Set-LeaderData @{"active-leader"=($ENV:ComputerName);}
+        Set-LeaderData @{"active-leader"=($computername);}
     }
     if (($isLeader -and $isFormerLeader) -or $alreadyRunningLeaderElected) {
         Write-JujuLog "This unit should resume running the hook."

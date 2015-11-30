@@ -4,6 +4,7 @@
 
 # we want to exit on error
 $ErrorActionPreference = "Stop"
+$computername = [System.Net.Dns]::GetHostName()
 
 try {
     $adJoinModulePath = "$psscriptroot\active-directory.psm1"
@@ -13,7 +14,7 @@ try {
 
     $relation_set = @{
         'nano-adusers'=$adUser;
-        'computername'=$env:computername;
+        'computername'=$computername;
     }
 
     $rids = relation_ids -reltype "ad-join"
