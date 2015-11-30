@@ -18,6 +18,7 @@ $utilsModulePath = Join-Path $PSScriptRoot "utils.psm1"
 Import-Module -Force -DisableNameChecking $utilsModulePath
 $jujuModulePath = Join-Path $PSScriptRoot "juju.psm1"
 Import-Module -Force -DisableNameChecking $jujuModulePath
+$computername = [System.Net.Dns]::GetHostName()
 
 function Import-Certificate()
 {
@@ -122,7 +123,7 @@ function Rename-Hostname {
     }
     $newHostname = $jujuName + $jujuUnitName[1]
 
-    if ($env:computername -ne $newHostname) {
+    if ($computername -ne $newHostname) {
         Rename-Computer -NewName $newHostname
         ExitFrom-JujuHook -WithReboot
     }
@@ -256,7 +257,7 @@ function Create-LocalAdmin {
     $existentUser = Get-WmiObject -Class Win32_Account `
                                   -Filter "Name = '$LocalAdminUsername'"
     if ($existentUser -eq $null) {
-        $computer = [ADSI]"WinNT://$env:computername"
+        $computer = [ADSI]"WinNT://$computername"
         $localAdmin = $computer.Create("User", $LocalAdminUsername)
         $localAdmin.SetPassword($LocalAdminPassword)
         $localAdmin.SetInfo()

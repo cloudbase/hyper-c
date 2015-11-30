@@ -2,6 +2,8 @@
 # Copyright 2014 Cloudbase Solutions SRL
 #
 
+$computername = [System.Net.Dns]::GetHostName()
+
 if ($env:PSModulePath -eq "") {
     $env:PSModulePath = "${env:ProgramFiles}\WindowsPowerShell\Modules;${env:SystemDrive}\windows\system32\windowspowershell\v1.0\Modules;$env:CHARM_DIR\lib\Modules"
     import-module Microsoft.PowerShell.Management
@@ -60,7 +62,7 @@ function Get-RelationParams($type){
         "context" = $True;
     }
 
-    $blobKey = ("djoin-" + $env:COMPUTERNAME)
+    $blobKey = ("djoin-" + $computername)
     $relations = relation_ids -reltype $type
     foreach($rid in $relations){
         $related_units = related_units -relid $rid

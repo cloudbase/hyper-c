@@ -6,6 +6,8 @@
 $env:PSModulePath = "${env:ProgramFiles}\WindowsPowerShell\Modules;${env:SystemDrive}\windows\system32\windowspowershell\v1.0\Modules;$env:CHARM_DIR\lib\Modules"
 import-module Microsoft.PowerShell.Management
 import-module Microsoft.PowerShell.Utility
+$computername = [System.Net.Dns]::GetHostName()
+
 #}else{
 #    $env:PSModulePath += ";$env:CHARM_DIR\lib\Modules"
 #}
@@ -72,7 +74,7 @@ function Get-RelationParams($type){
         "context" = $True;
     }
 
-    $blobKey = ("djoin-" + $env:COMPUTERNAME)
+    $blobKey = ("djoin-" + $computername)
     $relations = relation_ids -reltype $type
     foreach($rid in $relations){
         $related_units = related_units -relid $rid
@@ -127,7 +129,7 @@ function Is-GroupMember {
 		where {$_ -AND $_ -notmatch "command completed successfully"} | 
 		select -skip 4
 	$ret = New-Object PSObject -Property @{
-		Computername = $env:COMPUTERNAME
+		Computername = $computername
 		Group = $Group
 		Members=$members
 		}

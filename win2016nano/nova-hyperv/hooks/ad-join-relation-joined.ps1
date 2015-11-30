@@ -6,6 +6,7 @@ $env:PSModulePath += ";$env:CHARM_DIR\lib\Modules"
 
 # we want to exit on error
 $ErrorActionPreference = "Stop"
+$computername = [System.Net.Dns]::GetHostName()
 
 try {
     Import-Module -DisableNameChecking CharmHelpers
@@ -15,7 +16,7 @@ try {
 
     $relation_set = @{
         'nano-adusers'=$adUser;
-        'computername'=$env:computername;
+        'computername'=$computername;
     }
 
     $rids = relation_ids -reltype "ad-join"

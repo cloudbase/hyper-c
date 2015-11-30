@@ -102,7 +102,7 @@ maas:
         # These are all the MAC addresses from all the nodes that are supposed to be
         # used as EXTERNAL ports. You can find these ports in MaaS under node details
         # Make sure you change this to match your environment.
-        ext-port: "52:54:00:7e:88:bd"
+        ext-port: "eth2"
         instance-mtu: 1450
         openstack-origin: "cloud:trusty-liberty"
         vlan-ranges: "physnet1:3200:3250"
@@ -115,7 +115,7 @@ maas:
         # These are all the MAC addresses from all the nodes that are supposed to be
         # used as data ports. You can find these ports in MaaS under node details
         # Make sure you change this to match your environment.
-        data-port: "52:54:00:a3:15:9a"
+        data-port: "eth1"
     nova-cloud-controller:
       options:
         network-manager: "Neutron"

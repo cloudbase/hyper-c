@@ -6,6 +6,8 @@ $utilsModulePath = Join-Path $PSScriptRoot "utils.psm1"
 Import-Module -Force -DisableNameChecking $utilsModulePath
 $jujuModulePath = Join-Path $PSScriptRoot "juju.psm1"
 Import-Module -Force -DisableNameChecking $jujuModulePath
+$computername = [System.Net.Dns]::GetHostName()
+
 
 function Start-ProcessRedirect {
     param(
@@ -77,7 +79,7 @@ function Get-JujuUnitName {
 
 function Rename-Hostname {
     $newHostname = Get-JujuUnitName
-    if ($env:computername -ne $newHostname) {
+    if ($computername -ne $newHostname) {
         Rename-Computer -NewName $newHostname
         ExitFrom-JujuHook -WithReboot
     }
@@ -328,7 +330,7 @@ function Add-WindowsUser {
 
     $existentUser = Get-WindowsUser $Username
     if ($existentUser -eq $null) {
-        $computer = [ADSI]"WinNT://$env:computername"
+        $computer = [ADSI]"WinNT://$computername"
         $user = $computer.Create("User", $Username)
         $user.SetPassword($Password)
         $user.SetInfo()
@@ -339,8 +341,7 @@ function Add-WindowsUser {
         $user.SetInfo()
     } else {
         Execute-ExternalCommand -Command {
-            $computername = hostname.exe
-            $user = [ADSI] "WinNT://$computerName/$Username,User"
+            $user = [ADSI] "WinNT://$computername/$Username,User"
             $user.SetPassword($Password)
         } -ErrorMessage "Failed to update user password."
     }
