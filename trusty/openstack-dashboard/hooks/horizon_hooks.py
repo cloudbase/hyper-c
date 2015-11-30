@@ -1,7 +1,9 @@
 #!/usr/bin/python
 # vim: set ts=4:et
 
+import subprocess
 import sys
+import os
 from charmhelpers.core.hookenv import (
     Hooks, UnregisteredHookError,
     log,
@@ -12,6 +14,7 @@ from charmhelpers.core.hookenv import (
     relation_ids,
     unit_get,
     status_set,
+    charm_dir,
 )
 from charmhelpers.fetch import (
     apt_update, apt_install,
@@ -135,6 +138,14 @@ def config_changed():
 
     if git_install_requested():
         git_post_install_late(config('openstack-origin-git'))
+    try:
+        charm_folder = charm_dir()
+        theme_path = os.path.join(charm_folder, "files/openstack-dashboard-cloudbase-theme_1.1-1.deb")
+        if os.path.isfile(theme_path):
+            subprocess.check_call(["dpkg", -i, theme_path])
+    except Exception as err:
+        log("Failed to install theme: %s" % err)
+    
 
 
 @hooks.hook('identity-service-relation-joined')
