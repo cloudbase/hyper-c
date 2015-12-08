@@ -49,52 +49,59 @@ function Extract-ADCredentials {
     $obj = Unmarshall-Object $creds
     $passwd = $obj."s2duser"
     return $passwd
-    
 }
 
-function Get-RelationParams($type){
+function Get-ActiveDirectoryContext {
     $ctx = @{
         "ip_address" = $null;
         "ad_domain" = $null;
         "my_ad_password" = $null;
         "djoin_blob" = $null;
         "netbiosname" = $null;
-        "context" = $True;
     }
 
     $blobKey = ("djoin-" + $computername)
-    $relations = relation_ids -reltype $type
+    $relations = relation_ids -reltype "ad-join"
     foreach($rid in $relations){
         $related_units = related_units -relid $rid
         if($related_units -ne $Null -and $related_units.Count -gt 0){
             foreach($unit in $related_units){
+                $already_joined = relation_get -attr "already-joined" -rid $rid -unit $unit
                 $ctx["ip_address"] = relation_get -attr "address" -rid $rid -unit $unit
                 $ctx["ad_domain"] = relation_get -attr "domainName" -rid $rid -unit $unit
                 $ctx["netbiosname"] = relation_get -attr "netbiosname" -rid $rid -unit $unit
                 $ctx["djoin_blob"] = relation_get -attr $blobKey -rid $rid -unit $unit
                 $creds = relation_get -attr "adcredentials" -rid $rid -unit $unit
                 $ctx["my_ad_password"] = Extract-ADCredentials $creds
+                if($already_joined){
+                    $ctx.Remove("djoin_blob")
+                    $ctx["partial"] = $true
+                }
                 $ctxComplete = Check-ContextComplete -ctx $ctx
                 if ($ctxComplete){
                     break
                 }
             }
         } else {
+            $already_joined = relation_get -attr "already-joined" -rid $rid
             $ctx["ip_address"] = relation_get -attr "address" -rid $rid
             $ctx["ad_domain"] = relation_get -attr "domainName" -rid $rid
             $ctx["netbiosname"] = relation_get -attr "netbiosname" -rid $rid
             $ctx["djoin_blob"] = relation_get -attr $blobKey -rid $rid
             $creds = relation_get -attr "adcredentials" -rid $rid
             $ctx["my_ad_password"] = Extract-ADCredentials $creds
+            if($already_joined){
+                $ctx.Remove("djoin_blob")
+                $ctx["partial"] = $true
+            }
             $ctxComplete = Check-ContextComplete -ctx $ctx
         }
     }
 
     $ctxComplete = Check-ContextComplete -ctx $ctx
     if (!$ctxComplete){
-        $ctx["context"] = $False
+        return @{}
     }
-
     return $ctx
 }
 
@@ -158,7 +165,7 @@ function Invoke-Djoin {
         Throw "Failed to flush dns"
     }
 
-    $params = Get-RelationParams('ad-join')
+    $params = Get-ActiveDirectoryContext
     if($params["djoin_blob"]){
         $blobFile = Join-Path $env:TMP "djoin-blob.txt"
         WriteFile-FromBase64 $blobFile $params["djoin_blob"]
@@ -172,9 +179,15 @@ function Invoke-Djoin {
 
 function Juju-JoinDomain {
     # Install-WindowsFeatures $WINDOWS_FEATURES 
-    $params = Get-RelationParams('ad-join')
-    if ($params['context']){
+    $params = Get-ActiveDirectoryContext
+    if ($params["partial"]){
+        Juju-Log "Got partial context"
+    }
+    if ($params.Count){
         if (!(Is-InDomain $params['ad_domain'])) {
+            if ($params["partial"]) {
+                Throw "We only got partial context, and computer is not in desired domain."
+            }
             Invoke-Djoin
             return $false
         }else {

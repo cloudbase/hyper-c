@@ -16,6 +16,7 @@ function Check-ContextComplete {
     }
     foreach ($i in $Ctx.GetEnumerator()) {
         if (!$i.Value) {
+            juju-log.exe ("Context key " + $i.Key + " is " + $i.Value)
             return $false
         }
     }

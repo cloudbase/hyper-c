@@ -1338,10 +1338,19 @@ function Set-ADUserAvailability {
     $compName = Get-JujuRelation -Attr "computername"
 
     if ($compName){
-        $djoinKey = ("djoin-" + $compName)
-        $blob = Create-DjoinData $compName
-        if($blob){
-            $settings[$djoinKey] = $blob
+        try {
+            $isInAD = Get-ADComputer $compName
+        } catch {
+            $isInAD = $false
+        }
+        if(!$isInAD){
+            $djoinKey = ("djoin-" + $compName)
+            $blob = Create-DjoinData $compName
+            if($blob){
+                $settings[$djoinKey] = $blob
+            }
+        }else {
+            $settings["already-joined"] = $true
         }
     } 
 
@@ -1371,6 +1380,10 @@ function Set-ADUserAvailability {
 function Run-ADRelationDepartedHook {
     $compName = Get-JujuRelation -Attr "computername"
     if ($compName){
+        $blob = GetBlob-FromLeader -Node $compName
+        if(!$blob){
+            return $true
+        }
         try {
             $isInDomain = Get-ADComputer $compName -ErrorAction SilentlyContinue
         }catch{
