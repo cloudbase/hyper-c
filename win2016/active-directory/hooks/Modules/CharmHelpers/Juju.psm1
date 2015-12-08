@@ -586,7 +586,7 @@ function Get-MainNetadapter {
     if (!$unit_ip) {
         Throw "Failed to get unit IP"
     }
-
+    juju-log.exe "Found IP $unit_ip"
     $iface = Get-NetIPAddress | Where-Object `
         { $_.IPAddress -match $unit_ip -and $_.AddressFamily -eq "IPv4" }
     if ($iface) {
