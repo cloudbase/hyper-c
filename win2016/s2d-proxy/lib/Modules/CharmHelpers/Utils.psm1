@@ -4,6 +4,13 @@
 
 # UNTESTABLE METHODS
 
+function Flush-DNS {
+    ipconfig /flushdns
+    if($LASTEXITCODE){
+        Throw "Failed to flush dns"
+    }
+}
+
 function ConvertFile-ToBase64{
     Param (
         [parameter(Mandatory=$true)]

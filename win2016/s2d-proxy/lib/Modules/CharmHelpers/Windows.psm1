@@ -19,7 +19,7 @@ function Grant-Privilege {
     $files = Join-Path $env:CHARM_DIR "files"
     $privBin = Join-Path $files "SetUserAccountRights.exe"
     juju-log.exe "Running:  $privBin -g $User -v $Grant"
-    & $privBin -g $User -v $Grant
+    & $privBin -g $User -v $Grant 2>&1 | Out-Null
     if ($LASTEXITCODE){
         Throw "SetUserAccountRights.exe: exited with status $LASTEXITCODE"
     }

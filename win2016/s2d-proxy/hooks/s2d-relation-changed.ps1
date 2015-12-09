@@ -1,19 +1,34 @@
-# Copyright 2015 Cloudbase Solutions Srl
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = "Stop"
 
 try {
-    $modulePath = "$PSScriptRoot\hooks.psm1"
-    Import-Module -Force -DisableNameChecking $modulePath
+    if ($env:PSModulePath -eq "") {
+        $env:PSModulePath = "${env:ProgramFiles}\WindowsPowerShell\Modules;${env:SystemDrive}\windows\system32\windowspowershell\v1.0\Modules;$env:CHARM_DIR\lib\Modules"
+        import-module Microsoft.PowerShell.Management
+        import-module Microsoft.PowerShell.Utility
+    }else{
+        $env:PSModulePath += ";$env:CHARM_DIR\lib\Modules"
+    }
+
+    $adJoinModulePath = "$psscriptroot\active-directory.psm1"
+    $hooksPath = "$psscriptroot\hooks.psm1"
+    Import-Module -Force -DisableNameChecking $adJoinModulePath
+    Import-Module -Force -DisableNameChecking CharmHelpers
+
+    juju-log.exe "Running relation changed"
+    $script = "$psscriptroot\s2d-relation-changed-real.ps1"
+    $creds = Get-CimCredentials
+    if(!$creds){
+        juju-log.exe "Failed to get Cim credentials. Machine not yet in AD?"
+        return $true
+    }
+    $args = @("-File", "$script")
+    juju-log.exe "Running $script"
+    $exitCode = Start-ProcessAsUser -Command "$PShome\powershell.exe" -Arguments ($args -Join " ") -Credential $creds
+    if($exitCode){
+        Throw "Failed run $script --> $exitCode"
+    }
 } catch {
-    juju-log.exe "Error while loading modules: $_.Exception.Message"
+    juju-log.exe "Failed to run s2d-relation-changed.ps1: $_"
     exit 1
 }
 
-
-try {
-    juju-log.exe "Running: Run-S2DRelationChanged"
-    Run-S2DRelationChanged
-} catch {
-    juju-log.exe "Error while running main script: $_.Exception.Message"
-    exit 1
-}
