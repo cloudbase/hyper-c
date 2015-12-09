@@ -399,7 +399,6 @@ function Get-S2DContainerContext {
             $volumePath = relation_get -attr 's2dvolpath' -rid $rid -unit $unit
             juju-log.exe ">>> $volumePath"
             if($volumePath){
-                $ctx["instances_dir"] = $volumePath.Replace('/', '\')
                 if(!(Test-Path $volumePath)){
                     # Got s2dvolpath from relation, but its not actually present
                     # on disk. Not setting this to instances dir as it will fail

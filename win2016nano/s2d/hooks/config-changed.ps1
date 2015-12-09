@@ -1,6 +1,6 @@
-# Copyright 2015 Cloudbase Solutions Srl
-$ErrorActionPreference = 'Stop'
-
+#
+# Copyright 2014 Cloudbase Solutions SRL
+#
 try {
     $modulePath = "$PSScriptRoot\hooks.psm1"
     Import-Module -Force -DisableNameChecking $modulePath
@@ -13,6 +13,6 @@ try {
 try {
     Broadcast-Ready
 } catch {
-    juju-log.exe "Error while running main script: $_"
+    juju-log.exe "Error while running config-changed: $_"
     exit 1
 }

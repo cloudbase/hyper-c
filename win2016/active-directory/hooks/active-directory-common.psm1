@@ -121,7 +121,7 @@ function GetOrCreate-ADUser {
         [parameter(Mandatory=$true)]
         [string]$Username
     )
-
+    $keyName = ("ad-" + $Username)
     Write-JujuLog "Getting/creating AD user..."
     try {
         $usr = Get-ADUser -Identity $Username
@@ -129,15 +129,15 @@ function GetOrCreate-ADUser {
         $usr = $null
     }
     if ($usr) {
-        $cachedPass = Get-CharmState $ADUserSection $Username
-        $decPass = Decrypt-String $cachedPass
-
+        $cachedPass = GetBlob-FromLeader -Name $keyName
+        if(!$cachedPass){
+            Throw "Failed to get cached password for user $Username"
+        }
         Write-JujuLog "Finished getting/creating AD user..."
-        return @($usr, $decPass)
+        return @($usr, $cachedPass)
     } else {
         $details = CreateNew-ADUser $Username
-        $encPass = Encrypt-String $details[1]
-        Set-CharmState $ADUserSection $Username $encPass
+        SetBlob-ToLeader -Name $keyName -Blob $details[1]
 
         Write-JujuLog "Finished getting/creating AD user..."
         return $details
@@ -1215,11 +1215,9 @@ function Parse-ADUsersFromNano {
 function GetBlob-FromLeader {
     Param(
         [Parameter(Mandatory=$true)]
-        [string]$Node
+        [string]$Name
     )
-
-    $key = ("djoin-" + $node)
-    $blob = Get-LeaderData -Attr $key
+    $blob = Get-LeaderData -Attr $Name
     if($blob -ne "Nil"){
         return $blob
     }
@@ -1228,13 +1226,12 @@ function GetBlob-FromLeader {
 function SetBlob-ToLeader {
     Param(
         [Parameter(Mandatory=$true)]
-        [string]$Node,
+        [string]$Name,
         [Parameter(Mandatory=$true)]
         [string]$Blob
     )
 
-    $key = ("djoin-" + $node)
-    $ret = Set-LeaderData @{$key=$Blob;}
+    $ret = Set-LeaderData @{$Name=$Blob;}
     if (!$ret){
         Throw "Failed to set djoin blob for $node"
     }
@@ -1243,10 +1240,9 @@ function SetBlob-ToLeader {
 function RemoveBlob-FromLeader {
     Param(
         [Parameter(Mandatory=$true)]
-        [string]$Node
+        [string]$Name
     )
-    $key = ("djoin-" + $node)
-    $ret = Set-LeaderData @{$key="Nil";}
+    $ret = Set-LeaderData @{$Name="Nil";}
     if (!$ret){
         Throw "Failed to set djoin blob for $node"
     }
@@ -1257,6 +1253,8 @@ function Create-DjoinData {
         [Parameter(Mandatory=$true)]
         [string]$computername
     )
+    $blobName = ("djoin-" + $computername)
+
     if(!(Is-Leader)){
         Write-JujuLog "Not the leader. Exiting..."
         return $false
@@ -1267,7 +1265,7 @@ function Create-DjoinData {
         return $false
     }
 
-    $blob = GetBlob-FromLeader -Node $computername
+    $blob = GetBlob-FromLeader -Name $blobName
     if($blob){
         return $blob
     }
@@ -1280,13 +1278,13 @@ function Create-DjoinData {
 
     if((Test-Path $blobFile)){
         $c = ConvertFile-ToBase64 $blobFile
-        $blob = GetBlob-FromLeader -Node $computername
+        $blob = GetBlob-FromLeader -Name $blobName
         if($blob -and $blob -ne $c){
             # Stale local blob file
             $ret = rm -Force $blobFile
             return $blob
         }
-        $ret = SetBlob-ToLeader -Node $computername -Blob $c
+        $ret = SetBlob-ToLeader -Name $blobName -Blob $c
         return $c
     }
 
@@ -1299,7 +1297,7 @@ function Create-DjoinData {
         Throw "Error provisioning machine: $LastExitCode"
     }
     $blob = ConvertFile-ToBase64 $blobFile
-    $ret = SetBlob-ToLeader -Node $computername -Blob $blob
+    $ret = SetBlob-ToLeader -Name $blobName -Blob $blob
     $ret = rm -Force $blobFile
     return $blob
 }
@@ -1379,8 +1377,9 @@ function Set-ADUserAvailability {
 
 function Run-ADRelationDepartedHook {
     $compName = Get-JujuRelation -Attr "computername"
+    $blobName = ("djoin-" + $compName)
     if ($compName){
-        $blob = GetBlob-FromLeader -Node $compName
+        $blob = GetBlob-FromLeader -Name $blobName
         if(!$blob){
             return $true
         }
@@ -1392,7 +1391,7 @@ function Run-ADRelationDepartedHook {
         if($isInDomain){
             Remove-ADComputer $compName -Confirm:$false
         }
-        RemoveBlob-FromLeader -Node $compName
+        RemoveBlob-FromLeader -Name $blobName
         $storage = Join-Path $env:TEMP "blobs"
         $blobFile = Join-Path $storage ($compName + ".txt")
         if((Test-Path $blobFile)){

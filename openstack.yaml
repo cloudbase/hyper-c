@@ -159,9 +159,9 @@ maas:
         # allocates from.
         # For example: 192.168.2.10-192.168.2.100 where 192.168.2.0-192.168.2.9
         # are left for you to decide where to allocate them.
-        static-address: 10.41.41.6
+        static-address: 10.42.42.5
       #change this tag to match a node you want to target
-      constraints: "tags=s2d-proxy"
+      to: "active-directory"
     s2d:
       charm: local:win2016nano/s2d
       branch: lp:cloudbaseit/s2d

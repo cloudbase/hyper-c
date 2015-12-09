@@ -209,7 +209,8 @@ function Set-JujuRelation {
     foreach ($i in $Relation_Settings.GetEnumerator()) {
        $cmd += $i.Name + "=" + $i.Value
     }
-    return RunCommand $cmd
+    $ret = RunCommand $cmd
+    return $true
 }
 
 function Get-JujuRelationIds {

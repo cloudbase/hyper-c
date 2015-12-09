@@ -44,13 +44,13 @@ function Broadcast-Ready {
             }
         }
     }
-
-    if (!$ready -or $ready -eq "False"){
-        return $false
-    }
     $relation_set = @{
         "computername"=$computername; 
         'ready'="True";
+    }
+
+    if (!$ready -or $ready -eq "False"){
+        $relation_set["ready"] = "False"
     }
 
     $rids = relation_ids -reltype "s2d"

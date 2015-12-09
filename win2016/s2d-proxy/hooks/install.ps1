@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 try {
     $ret = Install-WindowsFeature -Name File-Services, Failover-Clustering -IncludeManagementTools
     if (!$ret.Success){
-        Throw "Failed to ionstall windows features"
+        Throw "Failed to install windows features"
     }
     Enable-WindowsOptionalFeature -Online -FeatureName "ActiveDirectory-Powershell" -All
 } catch {

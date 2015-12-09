@@ -17,6 +17,52 @@ $nova_compute = "nova-compute"
 
 Import-Module -Force -DisableNameChecking CharmHelpers
 
+function Get-CimCredentials {
+    if($cimCreds){
+        return $cimCreds
+    }
+    juju-log.exe "Fetching active directory context"
+    $ctx = Get-ActiveDirectoryContext
+    if(!$ctx.Count) {
+        return $false
+    }
+    juju-log.exe "Granting privileges on s2duser"
+    GrantPrivileges-OnDomainUser -Username "s2duser" -Domain $ctx["netbiosname"]
+
+    $clearPass = $ctx["my_ad_password"]
+    juju-log.exe "Converting string to SecureString"
+    $passwd = ConvertTo-SecureString -AsPlainText -Force $clearPass
+    $usr = ($ctx["netbiosname"] + "\s2duser")
+    juju-log.exe "Generating new credential object using $usr and $clearPass"
+    $c = New-Object System.Management.Automation.PSCredential($usr, $passwd)
+    Set-Variable -Scope Global -Name cimCreds -Value $c
+    juju-log.exe "Returning creds"
+    return $c
+}
+
+function Get-NewCimSession {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [array]$Nodes
+    )
+
+    $creds = Get-CimCredentials
+    if(!$creds){
+        Throw "Failed to get CIM credentials"
+    }
+    foreach ($node in $nodes){
+        try {
+            juju-log.exe "Creating new CIM session on node $node"
+            $session = New-CimSession -ComputerName $node
+            return $session
+        } catch {
+            juju-log.exe "Failed to get CIM session on $node`: $_"
+            continue
+        }
+    }
+    Throw "Failed to get a CIM session on any of the provided nodes: $Nodes"
+}
+
 function Get-AdUserAndGroup {
     $creds = @{
         "s2duser"=@(
@@ -64,7 +110,8 @@ function Get-ActiveDirectoryContext {
     $relations = relation_ids -reltype "ad-join"
     foreach($rid in $relations){
         $related_units = related_units -relid $rid
-        if($related_units -ne $Null -and $related_units.Count -gt 0){
+        juju-log.exe "Found related units: $related_units"
+        if($related_units){
             foreach($unit in $related_units){
                 $already_joined = relation_get -attr "already-joined" -rid $rid -unit $unit
                 $ctx["ip_address"] = relation_get -attr "address" -rid $rid -unit $unit
@@ -82,19 +129,6 @@ function Get-ActiveDirectoryContext {
                     break
                 }
             }
-        } else {
-            $already_joined = relation_get -attr "already-joined" -rid $rid
-            $ctx["ip_address"] = relation_get -attr "address" -rid $rid
-            $ctx["ad_domain"] = relation_get -attr "domainName" -rid $rid
-            $ctx["netbiosname"] = relation_get -attr "netbiosname" -rid $rid
-            $ctx["djoin_blob"] = relation_get -attr $blobKey -rid $rid
-            $creds = relation_get -attr "adcredentials" -rid $rid
-            $ctx["my_ad_password"] = Extract-ADCredentials $creds
-            if($already_joined){
-                $ctx.Remove("djoin_blob")
-                $ctx["partial"] = $true
-            }
-            $ctxComplete = Check-ContextComplete -ctx $ctx
         }
     }
 
@@ -110,7 +144,7 @@ function Is-GroupMember {
 		[Parameter(Mandatory=$true)]
 		[string]$Group,
 		[Parameter(Mandatory=$true)]
-                [string]$Username
+        [string]$Username
 	)
 	$members = net localgroup $Group | 
 		where {$_ -AND $_ -notmatch "command completed successfully"} | 
@@ -123,6 +157,28 @@ function Is-GroupMember {
 	return $false
 }
 
+function GrantPrivileges-OnDomainUser {
+    Param (
+        [Parameter(Mandatory=$true)]
+        [string]$Username,
+        [Parameter(Mandatory=$true)]
+        [string]$Domain
+    )
+
+    $domUser = "$domain\$Username"
+    Grant-Privilege $domUser SeServiceLogonRight
+
+    $administratorsGroupSID = "S-1-5-32-544"
+    $adminGroup = Convert-SIDToFriendlyName $administratorsGroupSID
+
+    juju-log.exe "Checking if $Username is in $adminGroup"
+    $isMember = Is-GroupMember -Group $adminGroup -Username $Username
+    if (!$isMember){
+        juju-log.exe "Adding $domUser to group $adminGroup"
+        net localgroup $adminGroup $domUser /add 2>&1 | Out-Null
+    }
+}
+
 function Set-JujudUser {
     Param (
         [Parameter(Mandatory=$true)]
@@ -131,16 +187,7 @@ function Set-JujudUser {
         [Parameter(Mandatory=$true)]
         [string]$Domain
     )
-    $domUser = "$domain\$Username"
-    Grant-Privilege $domUser SeServiceLogonRight
-
-    $administratorsGroupSID = "S-1-5-32-544"
-    $adminGroup = Convert-SIDToFriendlyName $administratorsGroupSID
-
-    $isMember = Is-GroupMember -Group $adminGroup -Username $domUser
-    if (!$isMember){
-    	net localgroup $adminGroup $domUser /add
-    }
+    GrantPrivileges-OnDomainUser -Username $Username -Domain $Domain
 
     $jujuServices = gcim win32_service | Where-Object {$_.Name -like "jujud-*"}
     foreach($i in $jujuServices){
@@ -189,18 +236,11 @@ function Juju-JoinDomain {
                 Throw "We only got partial context, and computer is not in desired domain."
             }
             Invoke-Djoin
-            return $false
-        }else {
-            $username = "s2duser"
-            $pass = $params["my_ad_password"]
-            Juju-Log "Got password $pass from relation"
-            Juju-Log "Setting nova user"
-            Set-JujudUser -Username $username -Password $pass -Domain $params['netbiosname']
-            return $true
         }
-    } else {
-        Juju-Log "ad-join returned EMPTY"
+        GrantPrivileges-OnDomainUser -Username "s2duser" -Domain $params["netbiosname"]
+        return $true
     }
+    Juju-Log "ad-join returned EMPTY"
     return $false
 }
 

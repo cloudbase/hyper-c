@@ -5,14 +5,15 @@ try {
     $modulePath = "$PSScriptRoot\hooks.psm1"
     Import-Module -Force -DisableNameChecking $modulePath
 } catch {
-    juju-log.exe "Error while loading modules: $_.Exception.Message"
+    juju-log.exe "Error while loading modules : $_"
     exit 1
 }
 
 
 try {
-    Broadcast-Ready
+    juju-log.exe "Running : Run-S2DRelationChanged"
+    Run-S2DRelationChanged
 } catch {
-    juju-log.exe "Error while running main script: $_"
+    juju-log.exe "Error while running main script : $_"
     exit 1
 }

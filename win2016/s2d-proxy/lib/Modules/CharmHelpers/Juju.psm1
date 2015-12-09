@@ -105,7 +105,7 @@ function Execute-Command {
                      -Params $newCmd
     try {
         $ret = Invoke-Command -ScriptBlock $scriptBlock
-    } catch [Exception]{
+    } catch {
         Write-JujuError $_ -Fatal $true
     }
 
