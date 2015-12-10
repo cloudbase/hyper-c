@@ -37,13 +37,13 @@ function Get-S2DNodes {
                 continue
             }
             $ready = relation_get -attr "ready" -rid $rid -unit $unit
-            juju-log.exe "Unit $unit has reaty state set to: $ready"
-            if(!$ready){
-                juju-log.exe "Node $private_address is not yet ready"
+            juju-log.exe "Unit $unit has ready state set to: $ready"
+            if(!$ready -or $ready -eq "False"){
+                juju-log.exe "Node $computername is not yet ready"
                 continue
             }
             try{
-                $isInAD = Get-ADComputer $computername -ErrorAction SilentlyContinue -Credential $creds -Server $ctx["ip_address"]
+                $isInAD = Get-ADComputer $computername -ErrorAction SilentlyContinue 
                 if(!$isInAD){
                     juju-log.exe "Node $computername is not yet in AD"
                     continue
@@ -209,26 +209,28 @@ function Create-S2DVolume {
 
     $clusterVirtualDiskName = "Cluster Virtual Disk ({0})" -f $VolumeName
     juju-log.exe "Checking if volume already exists"
-    $volumeExists = Get-VirtualDisk -CimSession $Session -FriendlyName $VolumeName -ErrorAction SilentlyContinue
-    if ($volumeExists){
+    $vdisk = Get-VirtualDisk -CimSession $Session -FriendlyName $VolumeName -ErrorAction SilentlyContinue
+    if ($vdisk){
         $sharedDiskExists = Get-ClusterSharedVolume -Cluster $ClusterName `
                                                     -Name $clusterVirtualDiskName `
-                                                    -ErrorActionPreference SilentlyContinue
+                                                    -ErrorAction SilentlyContinue
         if($sharedDiskExists){
             return $true
         }
     }
 
-    if(!$volumeExists){
+    if(!$vdisk){
         juju-log.exe "Getting Storage Pool $storagePool"
         $pool = Get-StoragePool -CimSession $Session -FriendlyName $storagePool
         juju-log.exe "Creating new virtual disk $VolumeName"
         $vdisk = New-VirtualDisk -CimSession $Session -StoragePoolFriendlyName $pool.FriendlyName `
                                  -FriendlyName $VolumeName -UseMaximumSize -ResiliencySettingName Mirror
-        juju-log.exe "Creating New partition on virtual disk"
-        $partition = $vdisk | Get-Disk | New-Partition -UseMaximumSize
     }
-
+    # clear partitions
+    $vdisk | Get-Disk | Get-Partition | Remove-Partition -Confirm:$false
+    juju-log.exe "Creating New partition on virtual disk"
+    $partition = $vdisk | Get-Disk | New-Partition -UseMaximumSize
+    
     # get the cluster resource and suspend it
     juju-log.exe "Fetching cluster resources"
     $clusterResources = Get-ClusterResource -Cluster $ClusterName
@@ -249,8 +251,8 @@ function Create-S2DVolume {
     juju-log.exe "Suspending cluster resource $name"
     Suspend-ClusterResource -Cluster $ClusterName -Name $name
     # format the volume
-    juju-log.exe "Fromatting volume"
-    Format-Volume -CimSession $Session -Partition $partition -FileSystem ReFS -FileSystemLabel $VolumeName
+    juju-log.exe "Fromatting volume: Format-Volume -CimSession $Session -Partition $partition -FileSystem ReFS"
+    Format-Volume -CimSession $Session -Partition $partition -FileSystem ReFS
     # Unsuspend cluster resource
     juju-log.exe "Resuming cluster resource $name"
     Resume-ClusterResource -Cluster $ClusterName -Name $name
