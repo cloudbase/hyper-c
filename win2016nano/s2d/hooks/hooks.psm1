@@ -33,7 +33,7 @@ function Run-S2DRelationChanged {
 }
 
 function Broadcast-Ready {
-    $ready = $false
+    $ready = "False"
     $relations = relation_ids -reltype 's2d-container'
     foreach($rid in $relations){
         $related_units = related_units -relid $rid
@@ -46,11 +46,7 @@ function Broadcast-Ready {
     }
     $relation_set = @{
         "computername"=$computername; 
-        'ready'="True";
-    }
-
-    if (!$ready -or $ready -eq "False"){
-        $relation_set["ready"] = "False"
+        "ready"=$ready;
     }
 
     $rids = relation_ids -reltype "s2d"

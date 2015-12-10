@@ -7,7 +7,9 @@ import-module Microsoft.PowerShell.Management
 import-module Microsoft.PowerShell.Utility
 $ErrorActionPreference = "Stop"
 
+$adModule = Join-Path $psscriptroot "active-directory.psm1"
 Import-Module -Force -DisableNameChecking CharmHelpers
+Import-Module -Force -DisableNameChecking $adModule
 
 $ovs_vsctl = "${env:ProgramFiles(x86)}\Cloudbase Solutions\Open vSwitch\bin\ovs-vsctl.exe"
 $env:OVS_RUNDIR = "$env:ProgramData\openvswitch"
@@ -1167,6 +1169,7 @@ function Run-ConfigChanged {
     if($nova_restart -and $neutron_restart){
         status-set.exe "active"
     }
+    Ping-Subordonate
 }
 
 Export-ModuleMember -Function * -Variable JujuCharmServices

@@ -471,11 +471,11 @@ function relation_get {
 
 function relation_set {
     param(
-        [string]$Relation_Id=$null,
-        [Hashtable]$Relation_Settings=@{}
+        [string]$rid=$null,
+        [Hashtable]$relation_settings=@{}
     )
 
-    return Set-JujuRelation -Relation_Id $Relation_Id `
+    return Set-JujuRelation -Relation_Id $rid `
                             -Relation_Settings $Relation_Settings
 }
 

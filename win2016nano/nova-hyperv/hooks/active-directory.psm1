@@ -95,18 +95,6 @@ function Get-RelationParams($type){
                     break
                 }
             }
-        } else {
-            $ctx["ad_host"] = relation_get -attr "private-address" -rid $rid 
-            $ctx["ip_address"] = relation_get -attr "address" -rid $rid
-            $ctx["ad_hostname"] = relation_get -attr "hostname" -rid $rid
-            $ctx["ad_username"] = relation_get -attr "username" -rid $rid 
-            $ctx["ad_password"] = relation_get -attr "password" -rid $rid 
-            $ctx["ad_domain"] = relation_get -attr "domainName" -rid $rid
-            $ctx["netbiosname"] = relation_get -attr "netbiosname" -rid $rid
-            $ctx["djoin_blob"] = relation_get -attr $blobKey -rid $rid
-            $creds = relation_get -attr "nano-ad-credentials" -rid $rid
-            $ctx["my_ad_password"] = Extract-NovaADCredentials $creds
-            $ctxComplete = Check-ContextComplete -ctx $ctx
         }
     }
 
@@ -195,11 +183,21 @@ function Set-ExtraRelationParams {
 }
 
 function Ping-Subordonate {
-    $relations = relation_ids -reltype 's2d-container'
-    $relation_set = @{
-        "ready"="True";
+    $ready = "False"
+    $params = Get-RelationParams('ad-join')
+    if ($params['context']){
+        if ((Is-InDomain $params['ad_domain'])) {
+            $ready = "True"
+        }
     }
+
+    $relation_set = @{
+        "ready"=$ready;
+    }
+    $relations = relation_ids -reltype 's2d'
+    juju-log.exe "Found relations $relations"
     foreach($rid in $relations){
+        juju-log.exe "relation_set -relation_settings $relation_set -rid $rid"
         $ready = relation_set -relation_settings $relation_set -rid $rid
     }
 }
