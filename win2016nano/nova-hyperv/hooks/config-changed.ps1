@@ -8,13 +8,13 @@ $ErrorActionPreference = "Stop"
 try {
     Import-Module -Force -DisableNameChecking "$psscriptroot\compute-hooks.psm1"
 }catch{
-    juju-log.exe "Failed to import modules: $_"
+    Write-JujuLog "Failed to import modules: $_" -LogLevel ERROR
     exit 1
 }
 
 try {
     Run-ConfigChanged
 } catch {
-    juju-log.exe "Failed to run config-changed: $_"
+    Write-JujuLog "Failed to run config-changed: $_" -LogLevel ERROR
     exit 1
 }

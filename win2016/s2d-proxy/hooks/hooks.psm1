@@ -17,45 +17,45 @@ function Get-S2DNodes {
     $nodes = @()
     $creds = Get-CimCredentials
     if(!$creds){
-        juju-log.exe "WARNING: Could not get credentials"
+        Write-JujuWarning "Could not get credentials"
         return $nodes
     }
 
     $ctx = Get-ActiveDirectoryContext
     if(!$ctx.Count) {
-        juju-log.exe "WARNING: Could not get AD context"
+        Write-JujuWarning "Could not get AD context"
         return $nodes
     }
 
     foreach($rid in $relations){
-        juju-log.exe "Getting related units for: $rid"
+        Write-JujuInfo "Getting related units for: $rid"
         $related_units = related_units -relid $rid
-        juju-log.exe "Found related units: $related_units"
+        Write-JujuInfo "Found related units: $related_units"
         foreach($unit in $related_units){
             $computername = relation_get -attr "computername" -rid $rid -unit $unit
             if(!$computername){
                 continue
             }
             $ready = relation_get -attr "ready" -rid $rid -unit $unit
-            juju-log.exe "Unit $unit has ready state set to: $ready"
+            Write-JujuInfo "Unit $unit has ready state set to: $ready"
             if(!$ready -or $ready -eq "False"){
-                juju-log.exe "Node $computername is not yet ready"
+                Write-JujuInfo "Node $computername is not yet ready"
                 continue
             }
             try{
                 $isInAD = Get-ADComputer $computername -ErrorAction SilentlyContinue 
                 if(!$isInAD){
-                    juju-log.exe "Node $computername is not yet in AD"
+                    Write-JujuWarning "Node $computername is not yet in AD"
                     continue
                 }
             } catch {
-                juju-log.exe "Node $computername is not yet in AD: $_"
+                Write-JujuWarning "Node $computername is not yet in AD: $_"
                 continue
             }
             $nodes += $computername
         }
     }
-    juju-log.exe "Returning $nodes"
+    Write-JujuInfo "Returning $nodes"
     return ($nodes -as [array])
 }
 
@@ -75,7 +75,7 @@ function Create-S2DCluster {
 
     $cluster = Get-Cluster -Name $ClusterName -Domain $Domain -ErrorAction SilentlyContinue
     if(!$cluster){
-        juju-log.exe "Running create cluster"
+        Write-JujuInfo "Running create cluster"
         New-Cluster -Name $ClusterName -Node $nodes -NoStorage -StaticAddress $staticAddress.Split(" ")
         Flush-DNS
     }
@@ -98,22 +98,22 @@ function Add-NodesToCluster {
             Throw "Could not get cluster"
         }
     }catch{
-        juju-log.exe "Warning: Cluster not initialized: $_"
-        juju-log.exe "Delaying Add-ClusterNode"
+        Write-JujuWarning "Cluster not initialized: $_"
+        Write-JujuWarning "Delaying Add-ClusterNode"
         return $false
     }
-    juju-log.exe "Got nodes: $nodes"
+    Write-JujuInfo "Got nodes: $nodes"
     foreach ($node in $nodes) {
         $n = $node -as [string]
-        juju-log.exe "Looking for $n in AD"
+        Write-JujuInfo "Looking for $n in AD"
         $isInAD = Get-ADComputer $n -ErrorAction SilentlyContinue
         if(!$isInAD){
-            juju-log.exe "Node $n is not in AD yet."
+            Write-JujuWarning "Node $n is not in AD yet."
             continue
         }
         $isAdded = Get-ClusterNode -Name $n -Cluster ($ClusterName + "." + $Domain) -ErrorAction SilentlyContinue
         if (!$isAdded) {
-            juju-log.exe "Trying to add $node"
+            Write-JujuInfo "Trying to add $node"
             Add-ClusterNode -Name $n -Cluster $ClusterName -NoStorage
         }
     }
@@ -128,14 +128,14 @@ function Enable-S2D {
         [string]$ClusterName
     )
     try {
-        juju-log.exe "Getting cluster status"
+        Write-JujuInfo "Getting cluster status"
         $cluster = Get-Cluster -Name $clusterName -Domain $Domain
     }catch{
-        juju-log.exe "Warning: Cluster not initialized"
-        juju-log.exe "Delaying Enable-ClusterStorageSpacesDirect"
+        Write-JujuWarning "Cluster not initialized"
+        Write-JujuWarning "Delaying Enable-ClusterStorageSpacesDirect"
         return $false
     }
-    juju-log.exe ("cluster DAS mode is: " + $cluster.DASModeEnabled)
+    Write-JujuInfo ("cluster DAS mode is: " + $cluster.DASModeEnabled)
     if($cluster.DASModeEnabled -eq 1){
         return $true
     }
@@ -163,7 +163,7 @@ function Create-StoragePool {
     $storageSubsystem = Get-StorageSubSystem  -Name ($ClusterName + "." + $Domain) -CimSession $Session
     
     $physicalDisks = $storageSubsystem | Get-PhysicalDisk -CimSession $Session
-    juju-log.exe "Creating storage pool $StoragePool"
+    Write-JujuInfo "Creating storage pool $StoragePool"
     New-StoragePool -StorageSubSystemName ($ClusterName + "." + $Domain) `
                     -FriendlyName $StoragePool -WriteCacheSizeDefault 0 `
                     -ProvisioningTypeDefault Fixed -ResiliencySettingNameDefault Mirror `
@@ -208,31 +208,29 @@ function Create-S2DVolume {
     )
 
     $clusterVirtualDiskName = "Cluster Virtual Disk ({0})" -f $VolumeName
-    juju-log.exe "Checking if volume already exists"
+    Write-JujuInfo "Checking if volume already exists"
     $vdisk = Get-VirtualDisk -CimSession $Session -FriendlyName $VolumeName -ErrorAction SilentlyContinue
     if ($vdisk){
+        Write-JujuInfo "Checking if virtual disk has been added as a shared storage disk"
         $sharedDiskExists = Get-ClusterSharedVolume -Cluster $ClusterName `
                                                     -Name $clusterVirtualDiskName `
                                                     -ErrorAction SilentlyContinue
         if($sharedDiskExists){
+            Write-JujuInfo "Virtual disk $VolumeName already part of cluster. Skipping..."
             return $true
         }
     }
 
     if(!$vdisk){
-        juju-log.exe "Getting Storage Pool $storagePool"
+        Write-JujuInfo "Getting Storage Pool $storagePool"
         $pool = Get-StoragePool -CimSession $Session -FriendlyName $storagePool
-        juju-log.exe "Creating new virtual disk $VolumeName"
+        Write-JujuInfo "Creating new virtual disk $VolumeName"
         $vdisk = New-VirtualDisk -CimSession $Session -StoragePoolFriendlyName $pool.FriendlyName `
                                  -FriendlyName $VolumeName -UseMaximumSize -ResiliencySettingName Mirror
     }
-    # clear partitions
-    $vdisk | Get-Disk | Get-Partition | Remove-Partition -Confirm:$false
-    juju-log.exe "Creating New partition on virtual disk"
-    $partition = $vdisk | Get-Disk | New-Partition -UseMaximumSize
     
     # get the cluster resource and suspend it
-    juju-log.exe "Fetching cluster resources"
+    Write-JujuInfo "Fetching cluster resources"
     $clusterResources = Get-ClusterResource -Cluster $ClusterName
     $clusterDisks = $clusterResources | Where-Object {$_.ResourceType -eq "Physical Disk" -and $_.OwnerGroup -eq "Available Storage"} 
     $diskNames = $clusterDisks | Get-ClusterParameter -Name VirtualDiskName
@@ -248,21 +246,28 @@ function Create-S2DVolume {
     }
 
     # we need to suspend the cluster resource before we can format it
-    juju-log.exe "Suspending cluster resource $name"
+    Write-JujuInfo "Suspending cluster resource $name"
     Suspend-ClusterResource -Cluster $ClusterName -Name $name
+
+    # clear partitions
+    Write-JujuInfo "Clearing partitions on volume $VolumeName"
+    $vdisk | Get-Disk | Get-Partition | Remove-Partition -Confirm:$false
+    Write-JujuInfo "Creating New partition on virtual disk"
+    $partition = $vdisk | Get-Disk | New-Partition -UseMaximumSize
+
     # format the volume
-    juju-log.exe "Fromatting volume: Format-Volume -CimSession $Session -Partition $partition -FileSystem ReFS"
+    Write-JujuInfo "Fromatting volume"
     Format-Volume -CimSession $Session -Partition $partition -FileSystem ReFS
     # Unsuspend cluster resource
-    juju-log.exe "Resuming cluster resource $name"
+    Write-JujuInfo "Resuming cluster resource $name"
     Resume-ClusterResource -Cluster $ClusterName -Name $name
     # Add the new volume as a cluster shared volume
-    juju-log.exe "Adding $name to shared volumes"
+    Write-JujuInfo "Adding $name to shared volumes"
     Add-ClusterSharedVolume -Cluster $ClusterName -Name $name
 
-    juju-log.exe "Getting volume path for $VolumeName"
+    Write-JujuInfo "Getting volume path for $VolumeName"
     $path = Get-VolumePath -Vol $volumeName -ClusterName $ClusterName
-    juju-log.exe "Setting file integrity to `$false on $volumeName"
+    Write-JujuWarning "Setting file integrity to `$false on $volumeName"
     Set-FileIntegrity $path -Enable $false -CimSession $Session
     return $true
 }
@@ -297,7 +302,7 @@ function Broadcast-VolumeCreated {
     )
     $virtualDisk = Get-VirtualDisk -CimSession $Session -FriendlyName $VolumeName -ErrorAction SilentlyContinue
     if(!$virtualDisk){
-        juju-log.exe "Volume not created yet"
+        Write-JujuWarning "Volume $VolumeName not created yet"
         return $false
     }
     $paths = ($virtualDisk | Get-Disk | Get-Partition | Where-Object {$_.Type -eq "Basic"}).AccessPaths
@@ -328,7 +333,7 @@ function Broadcast-VolumeCreated {
 function Run-S2DRelationChanged {
     $isInDomain = (gcim Win32_ComputerSystem).PartOfDomain
     if (!$isInDomain){
-        juju-log.exe "Not yet in any domain. Skipping"
+        Write-JujuWarning "Not yet in any domain. Skipping"
         return $false
     }
     $ctx = Get-ActiveDirectoryContext
@@ -349,36 +354,36 @@ function Run-S2DRelationChanged {
 
     #juju-log.exe "Running Run-SetKCD"
     #Run-SetKCD
-    juju-log.exe "Found nodes: $nodes"
+    Write-JujuInfo "Found nodes: $nodes"
     if ($nodes.Count -ne $minimumUnits){
-        juju-log.exe ("Minimum required nodes not achieved($minimumUnits). Got: " + $nodes.Count)
+        Write-JujuInfo ("Minimum required nodes not achieved($minimumUnits). Got: " + $nodes.Count)
         return $false
     }
-    juju-log.exe "Creating new CIM session"
+    Write-JujuInfo "Creating new CIM session"
     $session = Get-NewCimSession -Nodes $nodes
-    juju-log.exe "Got new CIM session $session"
+    Write-JujuInfo "Got new CIM session $session"
     try {
-        juju-log.exe "Running Create-S2DCluster"
+        Write-JujuInfo "Running Create-S2DCluster"
         ExecuteWith-Retry {
             Create-S2DCluster -Nodes $nodes -Domain $fqdn -ClusterName $clusterName
         } -RetryInterval 10 -MaxRetryCount 10
-        juju-log.exe "Running Add-NodesToCluster"
+        Write-JujuInfo "Running Add-NodesToCluster"
         ExecuteWith-Retry {
             Add-NodesToCluster -nodes $nodes -Domain $fqdn -ClusterName $clusterName
         } -RetryInterval 10 -MaxRetryCount 10
-        juju-log.exe "Running Enable-S2D"
+        Write-JujuInfo "Running Enable-S2D"
         ExecuteWith-Retry {
             Enable-S2D -Domain $fqdn -ClusterName $clusterName
         } -RetryInterval 10 -MaxRetryCount 10
-        juju-log.exe "Running Create-StoragePool"
+        Write-JujuInfo "Running Create-StoragePool"
         ExecuteWith-Retry {
             Create-StoragePool -Domain $fqdn -ClusterName $clusterName -Session $session -StoragePool $storagePool
         } -RetryInterval 10 -MaxRetryCount 10
-        juju-log.exe "Running Create-S2DVolume"
+        Write-JujuInfo "Running Create-S2DVolume"
         ExecuteWith-Retry {
             Create-S2DVolume -Session $session -VolumeName $volumeName -StoragePool $storagePool -ClusterName $clusterName
         } -RetryInterval 10 -MaxRetryCount 10
-        juju-log.exe "Running Enable-ScaleOutFileServer"
+        Write-JujuInfo "Running Enable-ScaleOutFileServer"
         ExecuteWith-Retry {
             Enable-ScaleOutFileServer -Name $scaleoutname -Session $session -Domain $fqdn -ClusterName $clusterName
         } -RetryInterval 10 -MaxRetryCount 10

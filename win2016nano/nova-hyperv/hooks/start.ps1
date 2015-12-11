@@ -9,7 +9,7 @@ try {
     Import-Module -DisableNameChecking CharmHelpers
     Import-Module -Force -DisableNameChecking "$psscriptroot\compute-hooks.psm1"
 }catch{
-    juju-log.exe "Failed to import modules: $_"
+    Write-JujuLog "Failed to import modules: $_" -LogLevel ERROR
     exit 1
 }
 
@@ -17,6 +17,6 @@ try {
     Restart-Nova
     Restart-Neutron
 } catch {
-    juju-log.exe "Failed to start services: $_"
+    Write-JujuLog "Failed to start services: $_" -LogLevel ERROR
     exit 1
 }

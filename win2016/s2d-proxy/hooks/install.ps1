@@ -10,7 +10,7 @@ try {
     }
     Enable-WindowsOptionalFeature -Online -FeatureName "ActiveDirectory-Powershell" -All
 } catch {
-    juju-log.exe "Error while running main script: $_"
+    Write-JujuLog "Error while running main script: $_" -LogLevel ERROR
     exit 1
 }
 

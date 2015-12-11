@@ -7,13 +7,13 @@ try {
     $modulePath = "$PSScriptRoot\active-directory-common.psm1"
     Import-Module -Force -DisableNameChecking $modulePath
 } catch {
-    juju-log.exe "Error while loading modules: $_"
+    Write-JujuLog "Error while loading modules: $_" -LogLevel ERROR
     exit 1
 }
 
 try {
     Run-AddControllerRelationChangedHook
 } catch {
-    juju-log.exe "Error while running main script: $_"
+    Write-JujuLoge "Error while running main script: $_" -LogLevel ERROR
     exit 1
 }

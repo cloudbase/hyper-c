@@ -260,7 +260,7 @@ function ExecuteWith-Retry {
             $retryCount++
             if ($retryCount -gt $MaxRetryCount) {
                 $ErrorActionPreference = $currentErrorActionPreference
-                throw $_.Exception
+                throw
             } else {
                 Write-Error $_.Exception
                 Start-Sleep $RetryInterval

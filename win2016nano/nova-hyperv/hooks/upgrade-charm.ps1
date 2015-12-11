@@ -9,13 +9,13 @@ try {
     Import-Module -DisableNameChecking CharmHelpers
     Import-Module -Force -DisableNameChecking "$psscriptroot\compute-hooks.psm1"
 }catch{
-    juju-log.exe "Failed to import modules: $_"
+    Write-JujuLog "Failed to import modules: $_" -LogLevel ERROR
     exit 1
 }
 
 try {
     Run-ConfigChanged
 } catch {
-    juju-log.exe "Failed to run upgrade-charm: $_"
+    Write-JujuLog "Failed to run upgrade-charm: $_" -LogLevel ERROR
     exit 1
 }

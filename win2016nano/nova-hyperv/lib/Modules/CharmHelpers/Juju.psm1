@@ -17,18 +17,6 @@
 $utilsModulePath = Join-Path $PSScriptRoot "utils.psm1"
 Import-Module -Force -DisableNameChecking $utilsModulePath
 
-function Write-JujuError {
-    param( 
-        [parameter(Mandatory=$true)]
-        [string]$Msg,
-        [bool]$Fatal=$true
-    )
-
-    juju-log.exe $Msg
-    if ($Fatal) {
-        Throw $Msg
-    }
-}
 
 function Restart-Service {
     param(
@@ -354,7 +342,7 @@ function Get-JujuUnitPrivateIP {
     if(!$ip){
         Throw "Could not get private address"
     }
-    juju-log.exe ">>> Returning $ip"
+    Write-JujuLog "Returning $ip" -LogLevel INFO
     return $ip
 }
 
@@ -396,12 +384,75 @@ function Get-JujuRelationParams {
 }
 
 function Write-JujuLog {
-    param(
+    Param(
         [Parameter(Mandatory=$true)]
-        $Message
+        [string]$Message,
+        [ValidateSet("TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")]
+        [string]$LogLevel="INFO"
     )
 
-    juju-log.exe $Message
+    $cmd = @("juju-log.exe")
+    if($LogLevel -eq "DEBUG") {
+        $cmd += "--debug"
+    }
+    $cmd += $Message
+    $cmd += @("-l", $LogLevel.ToUpper())
+    & $cmd[0] $cmd[1..$cmd.Length]
+}
+
+function Write-JujuDebug {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Message
+    )
+
+    Write-JujuLog -Message $Message -LogLevel DEBUG
+}
+
+function Write-JujuTrace {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Message
+    )
+    Write-JujuLog -Message $Message -LogLevel TRACE
+}
+
+function Write-JujuInfo {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Message
+    )
+    Write-JujuLog -Message $Message -LogLevel INFO
+}
+
+function Write-JujuWarning {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Message
+    )
+
+    Write-JujuLog -Message $Message -LogLevel WARNING
+}
+
+function Write-JujuCritical {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Message
+    )
+    Write-JujuLog -Message $Message -LogLevel CRITICAL
+}
+
+function Write-JujuError {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Msg,
+        [bool]$Fatal=$true
+    )
+
+    Write-JujuLog -Message $Msg -LogLevel ERROR
+    if ($Fatal) {
+        Throw
+    }
 }
 
 function Execute-JujuReboot {

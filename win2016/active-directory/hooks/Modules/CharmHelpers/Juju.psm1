@@ -405,6 +405,65 @@ function Get-JujuRelationParams {
     return $ctx
 }
 
+function Write-JujuLog {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Message,
+        [ValidateSet("TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")]
+        [string]$LogLevel="INFO"
+    )
+
+    $cmd = @("juju-log.exe")
+    if($LogLevel -eq "DEBUG") {
+        $cmd += "--debug"
+    }
+    $cmd += $Message
+    $cmd += @("-l", $LogLevel.ToUpper())
+    & $cmd[0] $cmd[1..$cmd.Length]
+}
+
+function Write-JujuDebug {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Message
+    )
+
+    Write-JujuLog -Message $Message -LogLevel DEBUG
+}
+
+function Write-JujuTrace {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Message
+    )
+    Write-JujuLog -Message $Message -LogLevel TRACE
+}
+
+function Write-JujuInfo {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Message
+    )
+    Write-JujuLog -Message $Message -LogLevel INFO
+}
+
+function Write-JujuWarning {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Message
+    )
+
+    Write-JujuLog -Message $Message -LogLevel WARNING
+}
+
+function Write-JujuCritical {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Message
+    )
+    Write-JujuLog -Message $Message -LogLevel CRITICAL
+}
+
 function Write-JujuError {
     Param(
         [Parameter(Mandatory=$true)]
@@ -412,19 +471,10 @@ function Write-JujuError {
         [bool]$Fatal=$true
     )
 
-    Write-JujuLog $Msg
+    Write-JujuLog -Message $Msg -LogLevel ERROR
     if ($Fatal) {
-        Throw $Msg
+        Throw
     }
-}
-
-function Write-JujuLog {
-    Param(
-        [Parameter(Mandatory=$true)]
-        $Message
-    )
-
-    juju-log.exe $Message
 }
 
 function ExitFrom-JujuHook {
@@ -434,9 +484,9 @@ function ExitFrom-JujuHook {
 
     if ($WithReboot -eq $true) {
         Execute-JujuReboot -Now
-    } else {
-        Exit-Basic 0
     }
+    # TODO (gabriel-samfira): this looks bad. Need to evaluate this
+    exit 0
 }
 
 function Execute-JujuReboot {
