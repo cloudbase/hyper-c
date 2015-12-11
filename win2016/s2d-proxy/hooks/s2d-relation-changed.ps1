@@ -14,21 +14,21 @@ try {
     Import-Module -Force -DisableNameChecking $adJoinModulePath
     Import-Module -Force -DisableNameChecking CharmHelpers
 
-    juju-log.exe "Running relation changed"
+    Write-JujuInfo "Running relation changed"
     $script = "$psscriptroot\s2d-relation-changed-real.ps1"
     $creds = Get-CimCredentials
     if(!$creds){
-        juju-log.exe "Failed to get Cim credentials. Machine not yet in AD?"
+        Write-JujuWarning "Failed to get Cim credentials. Machine not yet in AD?"
         return $true
     }
     $args = @("-File", "$script")
-    juju-log.exe "Running $script"
+    Write-JujuInfo "Running $script"
     $exitCode = Start-ProcessAsUser -Command "$PShome\powershell.exe" -Arguments ($args -Join " ") -Credential $creds
     if($exitCode){
         Throw "Failed run $script --> $exitCode"
     }
 } catch {
-    juju-log.exe "Failed to run s2d-relation-changed.ps1: $_"
+    Write-JujuLog "Failed to run s2d-relation-changed.ps1: $_" -LogLevel ERROR
     exit 1
 }
 

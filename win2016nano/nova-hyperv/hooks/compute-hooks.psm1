@@ -2,10 +2,11 @@
 # Copyright 2014 Cloudbase Solutions SRL
 #
 
+$ErrorActionPreference = "Stop"
+
 $env:PSModulePath += "C:\Program Files\WindowsPowerShell\Modules;c:\windows\system32\windowspowershell\v1.0\Modules;$env:CHARM_DIR\lib\Modules"
 import-module Microsoft.PowerShell.Management
 import-module Microsoft.PowerShell.Utility
-$ErrorActionPreference = "Stop"
 
 $adModule = Join-Path $psscriptroot "active-directory.psm1"
 Import-Module -Force -DisableNameChecking CharmHelpers
@@ -41,7 +42,6 @@ $distro_urls = @{
         "installer" = @{
             'msi' = 'https://www.cloudbase.it/downloads/HyperVNovaCompute_Beta.msi';
             'zip' = 'https://www.cloudbase.it/downloads/HyperVNovaCompute_Liberty_12_0_0.zip';
-            #'zip' = 'http://192.168.200.1/nova-liberty.zip';
         };
         "ovs" = $true;
     };
@@ -88,14 +88,6 @@ function Extract-FromZip {
         mkdir $Destination
     }
     [System.IO.Compression.ZipFile]::ExtractToDirectory($Archive, $Destination)
-}
-
-function Is-NanoServer {
-    $serverLevels = Get-ItemProperty "HKLM:Software\Microsoft\Windows NT\CurrentVersion\Server\ServerLevels"
-    if ($serverLevels.NanoServer -eq 1){
-        return $true
-    }
-    return $false
 }
 
 function Install-Prerequisites
@@ -351,9 +343,9 @@ function Get-RabbitMQContext {
 
     $relations = relation_ids -reltype 'amqp'
     foreach($rid in $relations){
-        juju-log.exe "Getting related units for: $rid"
+        Write-JujuInfo "Getting related units for: $rid"
         $related_units = related_units -relid $rid
-        juju-log.exe "Found related units: $related_units"
+        Write-JujuInfo "Found related units: $related_units"
         foreach($unit in $related_units){
             $ctx["rabbit_host"] = relation_get -attr "private-address" -rid $rid -unit $unit
             $ctx["rabbit_password"] = relation_get -attr "password" -rid $rid -unit $unit
@@ -367,7 +359,7 @@ function Get-RabbitMQContext {
     if ($ctx_complete){
         return $ctx
     }
-    Write-JujuLog "RabbitMQ context not yet complete. Peer not ready?"
+    Write-JujuWarning "RabbitMQ context not yet complete. Peer not ready?"
     return @{}
 }
 
@@ -399,15 +391,14 @@ function Get-S2DContainerContext {
         $units = related_units -relid $rid
         foreach ($unit in $units){
             $volumePath = relation_get -attr 's2dvolpath' -rid $rid -unit $unit
-            juju-log.exe ">>> $volumePath"
             if($volumePath){
                 if(!(Test-Path $volumePath)){
                     # Got s2dvolpath from relation, but its not actually present
                     # on disk. Not setting this to instances dir as it will fail
+                    Write-JujuWarning "Relation information states that an s2d volume should be present, but could not be found locally."
                     continue
                 }
                 $ctx["instances_dir"] = $volumePath.Replace('/', '\')
-                juju-log.exe ("<<<<" + $ctx["instances_dir"])
                 return $ctx
             }
         }
@@ -466,7 +457,7 @@ function Get-NeutronContext {
     }
     $ctx_complete = Check-ContextComplete -ctx $ctx
     if (!$ctx_complete){
-        Write-JujuLog "Missing required relation settings for Neutron. Peer not ready?"
+        Write-JujuWarning "Missing required relation settings for Neutron. Peer not ready?"
         return @{}
     }
     $ctx["neutron_admin_auth_url"] = $ctx["auth_protocol"] + "://" + $ctx['keystone_host'] + ":" + $ctx['auth_port'].Trim('"') + "/v2.0"
@@ -489,7 +480,7 @@ function Get-GlanceContext {
             }
         }
     }
-    Write-JujuLog "Glance context not yet complete. Peer not ready?"
+    Write-JujuWarning "Glance context not yet complete. Peer not ready?"
     return @{}
 }
 
@@ -537,18 +528,18 @@ function Generate-Config {
     $should_restart = $true
     $service = $JujuCharmServices[$ServiceName]
     if (!$service){
-        Write-JujuError -Msg "No such service $ServiceName" -Fatal $false
+        Write-JujuWarning "No such service $ServiceName. Not generating config"
         return $false
     }
     $config = gc $service["template"]
     # populate config with variables from context
     foreach ($context in $service['context_generators']){
-        Write-JujuLog "Getting context for $context"
+        Write-JujuInfo "Getting context for $context"
         $ctx = & $context
-        Write-JujuLog "Got $context context $ctx"
+        Write-JujuInfo "Got $context context $ctx"
         if ($ctx.Count -eq 0){
             # Context is empty. Probably peer not ready
-            Write-JujuLog "Context for $context is EMPTY"
+            Write-JujuWarning "Context for $context is EMPTY"
             $should_restart = $false
             continue
         }
@@ -578,7 +569,7 @@ function Get-InterfaceFromConfig {
 
     $nic = $null
     $DataInterfaceFromConfig = charm_config -scope $ConfigOption
-    Write-JujuLog "Looking for $DataInterfaceFromConfig"
+    Write-JujuInfo "Looking for $DataInterfaceFromConfig"
     if ($DataInterfaceFromConfig -eq $false -or $DataInterfaceFromConfig -eq ""){
         if($MustFindAdapter) {
             Throw "No data-port was specified"
@@ -595,7 +586,6 @@ function Get-InterfaceFromConfig {
             $byName += $i
         }
     }
-    Write-JujuLog "We have MAC: $byMac  Name: $byName"
     if ($byMac.Length -ne 0){
         $nicByMac = Get-NetAdapter | Where-Object { $_.MacAddress -in $byMac }
     }
@@ -624,7 +614,7 @@ function Get-RealInterface {
         $bridgeName = $interface.Name.Replace('vEthernet (', '').Replace(')', '')
         $br = get-vmswitch -name $bridgeName
         $interface = Get-NetAdapter -InterfaceDescription $br.NetAdapterInterfaceDescription
-        Write-JujuLog "Getting parent $adapter"
+        Write-JujuInfo "Getting parent $adapter"
     }
     return $interface
 }
@@ -696,9 +686,8 @@ function Get-DataPort {
     $managementOS = charm_config -scope "vmswitch-management"
 
     $net_type = Get-NetType
-    Write-JujuLog "NetType is $net_type"
     if ($net_type -eq "ovs"){
-        Write-JujuLog "Trying to fetch OVS data port"
+        Write-JujuInfo "Trying to fetch OVS data port"
         $dataPort = Get-OVSDataPort
         return @($dataPort[0], $true)
     }
@@ -708,7 +697,7 @@ function Get-DataPort {
         return @($adapter, $managementOS)
     }
 
-    Write-JujuLog "Trying to fetch data port from config"
+    Write-JujuInfo "Trying to fetch data port from config"
     $nic = Get-InterfaceFromConfig
     if(!$nic) {
         $nic = Get-FallbackNetadapter
@@ -724,12 +713,11 @@ function Juju-ConfigureVMSwitch {
 
     $VMswitches = Get-VMSwitch -SwitchType External -ErrorAction SilentlyContinue
     $VMswitchName = Juju-GetVMSwitch
-    Write-JujuLog "Found switch $VMswitchName"
+    Write-JujuInfo "Found switch $VMswitchName"
     if ($VMswitches -and $VMswitches.Count -gt 0){
         $vmswitch = $VMswitches[0]
-        Write-JujuLog "Renaming switch"
+        Write-JujuInfo "Renaming switch"
         Rename-VMSwitch $vmswitch -NewName $VMswitchName
-        Write-JujuLog "renamed switch"
     }else{
         $vmswitch = $false
     }
@@ -741,7 +729,7 @@ function Juju-ConfigureVMSwitch {
             Reset-Bond $vmswitch.Name
         }
     }else{
-        Write-JujuLog "Adding new vmswitch"
+        Write-JujuInfo "Adding new vmswitch: $VMswitchName"
         New-VMSwitch -Name $VMswitchName -NetAdapterName $dataPort.Name -AllowManagementOS $managementOS
         return $true
     }
@@ -821,7 +809,7 @@ function Download-File {
             return $download_location
         }
     }
-    Write-JujuLog "Downloading file from $url to $download_location"
+    Write-JujuInfo "Downloading file from $url to $download_location"
     try {
         if((Is-NanoServer)){
             ExecuteWith-Retry { Invoke-FastWebRequest -Uri $url -OutFile $download_location }
@@ -829,9 +817,9 @@ function Download-File {
             ExecuteWith-Retry { (new-object System.Net.WebClient).DownloadFile($url, $download_location) }
         }
     } catch {
-        Write-JujuError "Could not download $url to destination $download_location"
+        Write-JujuLog "Could not download $url to destination $download_location" -LogLevel ERROR
+        Throw
     }
-
     return $download_location
 }
 
@@ -841,14 +829,14 @@ function Get-NovaInstaller {
     if ($distro -eq $false){
         $distro = "liberty"
     }
-    Write-JujuLog "URL: $installer_url"
+    Write-JujuInfo "installer-url is set to: $installer_url"
     if ($installer_url -eq $false -or $installer_url -eq "") {
         if (!$distro_urls[$distro] -or !$distro_urls[$distro]["installer"]){
-            Write-JujuError "Could not find a download URL for $distro"
+            Throw "Could not find a download URL for $distro"
         }
         if ((Is-NanoServer))  {
             if (!$distro_urls[$distro]["installer"]["zip"]) {
-                Write-JujuError "Distro $distro does not support Nano server"
+                Throw "Distro $distro does not support Nano server"
             }
             $url = $distro_urls[$distro]["installer"]["zip"]
         } else {
@@ -866,16 +854,16 @@ function Install-NovaFromMSI {
         [Parameter(Mandatory=$true)]
         [string]$InstallerPath
     )
-    Write-JujuLog "Running Nova install"
+    Write-JujuInfo "Running Nova install"
     $hasInstaller = Test-Path $InstallerPath
     if($hasInstaller -eq $false){
         $InstallerPath = Get-NovaInstaller
     }
-    Write-JujuLog "Installing from $InstallerPath"
+    Write-JujuInfo "Installing from $InstallerPath"
     cmd.exe /C call msiexec.exe /i $InstallerPath /qn /l*v $env:APPDATA\log.txt SKIPNOVACONF=1
 
     if ($lastexitcode){
-        Write-JujuError "Nova failed to install"
+        Throw "Nova failed to install"
     }
     return $true
 }
@@ -972,21 +960,21 @@ function Install-OVS {
         [string]$InstallerPath
     )
 
-    Write-JujuLog "Running OVS install"
+    Write-JujuInfo "Running OVS install"
     $ovs = gwmi Win32_Product | Where-Object {$_.Name -match "open vswitch"}
     if ($ovs){
-        Write-JujuLog "OVS is already installed"
+        Write-JujuInfo "OVS is already installed"
         return
     }
     $hasInstaller = Test-Path $InstallerPath
     if($hasInstaller -eq $false){
         $InstallerPath = Get-OVSInstaller
     }
-    Write-JujuLog "Installing from $InstallerPath"
+    Write-JujuInfo "Installing from $InstallerPath"
     cmd.exe /C call msiexec.exe /i $InstallerPath /qn /l*v $env:APPDATA\ovs-log.txt
 
     if ($lastexitcode){
-        Write-JujuError "OVS FAILED to install"
+        Throw "OVS FAILED to install"
     }
     return $true
 }
@@ -1001,7 +989,7 @@ function Check-OVSPrerequisites {
         Install-OVS $InstallerPath
     }
     if(!(Test-Path $ovs_vsctl)){
-        Write-JujuError "Could not find ovs_vsctl.exe in location: $ovs_vsctl"
+        Throw "Could not find ovs_vsctl.exe in location: $ovs_vsctl"
     }
 
     try {
@@ -1035,11 +1023,11 @@ function Check-ServicePrerequisites {
 
 function Get-OVSExtStatus {
     $br = Juju-GetVMSwitch
-    Write-JujuLog "Switch name is $br"
+    Write-JujuInfo "Switch name is $br"
     $ext = Get-VMSwitchExtension -VMSwitchName $br -Name $ovsExtName
 
     if ($ext -eq $null){
-        Write-JujuLog "Open vSwitch extension not installed"
+        Write-JujuInfo "Open vSwitch extension not installed"
         return $null
     }
 
@@ -1049,7 +1037,7 @@ function Get-OVSExtStatus {
 function Enable-OVSExtension {
     $ext = Get-OVSExtStatus
     if ($ext -eq $null){
-       Write-JujuError "Cannot enable OVS extension. Not installed"
+       Throw "Cannot enable OVS extension. Not installed"
     }
     if ($ext.Enabled -eq $false) {
         Enable-VMSwitchExtension $ovsExtName $ext.SwitchName
@@ -1158,12 +1146,12 @@ function Run-ConfigChanged {
     $JujuCharmServices = Charm-Services
 
     if ($nova_restart){
-        juju-log.exe "Restarting service Nova"
+        Write-JujuInfo "Restarting service Nova"
         Restart-Nova
     }
 
     if ($neutron_restart){
-        juju-log.exe "Restarting service Neutron"
+        Write-JujuInfo "Restarting service Neutron"
         Restart-Neutron
     }
     if($nova_restart -and $neutron_restart){

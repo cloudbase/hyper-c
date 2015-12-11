@@ -14,6 +14,6 @@ try {
 
     Run-S2DRelationChanged
 }catch{
-    juju-log.exe "Failed to run amqp-relation-joined: $_"
+    Write-JujuLog "Failed to run amqp-relation-joined: $_" -LogLevel ERROR
     exit 1
 }

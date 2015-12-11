@@ -7,7 +7,7 @@ try {
     $modulePath = "$PSScriptRoot\active-directory-common.psm1"
     Import-Module -Force -DisableNameChecking $modulePath
 } catch {
-    juju-log.exe "Error while loading modules: $_"
+    Write-JujuLog "Error while loading modules: $_" -LogLevel ERROR
     exit 1
 }
 
@@ -15,6 +15,6 @@ try {
     Run-TimeResync
     Run-InstallHook
 } catch {
-    juju-log.exe "Error while running main script: $_"
+    Write-JujuLog "Error while running main script: $_" -LogLevel ERROR
     exit 1
 }

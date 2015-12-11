@@ -56,7 +56,7 @@ function Run-TimeResync {
     if ($LastExitCode){
         Throw "Failed to set timezone"
     }
-    Write-JujuLog "Synchronizing time..."
+    Write-JujuInfo "Synchronizing time..."
     try {
         Start-Service "w32time"
         Execute-ExternalCommand {
@@ -65,7 +65,6 @@ function Run-TimeResync {
     } catch {
         Write-JujuError "Failed to synchronize time..." -Fatal $false
     }
-    Write-JujuLog "Finished synchronizing time."
 }
 
 function CreateNew-ADUser {
@@ -74,10 +73,10 @@ function CreateNew-ADUser {
         [string]$Username
     )
 
-    Write-JujuLog "Creating AD user..."
+    Write-JujuInfo "Creating AD user..."
     $dn = (Get-ADDomain).DistinguishedName
     if (!$dn) {
-        Write-JujuError "Could not get DistinguishedName."
+        Throw "Could not get DistinguishedName."
     }
     $passwd = Generate-StrongPassword
     $secPass = ConvertTo-SecureString -AsPlainText $passwd -Force
@@ -91,7 +90,7 @@ function CreateNew-ADUser {
                       -Path $adPath `
                       -PassThru
 
-    Write-JujuLog "Finished creating AD user."
+    Write-JujuInfo "Finished creating AD user."
     return @($usr, $passwd)
 }
 
@@ -122,7 +121,7 @@ function GetOrCreate-ADUser {
         [string]$Username
     )
     $keyName = ("ad-" + $Username)
-    Write-JujuLog "Getting/creating AD user..."
+    Write-JujuInfo "Getting/creating AD user..."
     try {
         $usr = Get-ADUser -Identity $Username
     } catch {
@@ -133,13 +132,11 @@ function GetOrCreate-ADUser {
         if(!$cachedPass){
             Throw "Failed to get cached password for user $Username"
         }
-        Write-JujuLog "Finished getting/creating AD user..."
+        Write-JujuInfo "Finished getting/creating AD user..."
         return @($usr, $cachedPass)
     } else {
         $details = CreateNew-ADUser $Username
         SetBlob-ToLeader -Name $keyName -Blob $details[1]
-
-        Write-JujuLog "Finished getting/creating AD user..."
         return $details
     }
 }
@@ -153,16 +150,13 @@ function CreateNew-ADOU {
         [string]$Path
     )
 
-    Write-JujuLog "Creating Organizational Unit..."
+    Write-JujuInfo "Creating Organizational Unit..."
     $Path = $Path.trim(",")
-    Write-JujuLog "OU: $OUName ; Path: $Path"
     $tmp = "OU=" + $OUName + "," + $Path
     $ou = Get-ADOrganizationalUnit -Filter {DistinguishedName -eq $tmp}
     if (!$ou) {
-        Write-JujuLog "$OUName --> $Path"
         $ou = New-ADOrganizationalUnit -Name $OUName -Path $Path
     }
-    Write-JujuLog "Finished creating Organizational Unit."
     return $ou
 }
 
@@ -173,7 +167,7 @@ function CreateNew-ADGroup {
         [string]$Group
     )
 
-    Write-JujuLog "Creating Active Directory Group $Group ..."
+    Write-JujuInfo "Creating Active Directory Group $Group ..."
     #Sanitize the group, in case there are extra " in it
     $Group = $Group.Replace('"',"")
     $dn = (Get-ADDomain).DistinguishedName
@@ -187,7 +181,7 @@ function CreateNew-ADGroup {
         $adType = $s[0].replace('"', "")
         $adTypeValue= $s[1].replace('"', "")
         if ($adType -eq "OU") {
-            Write-JujuLog "Creating $s[1]"
+            Write-JujuInfo ("Creating {0}" -f $s[1])
             $ou = CreateNew-ADOU $adTypeValue ($tmp + "," + $dn)
         } elseif ($adType -eq "CN") {
             $groupName = $adTypeValue
@@ -200,20 +194,17 @@ function CreateNew-ADGroup {
         $containerDn = $dn
     }
 
-    Write-JujuLog "Looking for $groupName"
+    Write-JujuInfo "Looking for $groupName"
     try {
         $grp = Get-ADGroup -Identity $groupName
-    } catch {
-        Write-JujuLog "AD Group $groupName does not exist."
-    }
-    if ($grp) {
-        Write-JujuLog "Active Directory Group $groupName already exists. Skipping."
         return $grp
+    } catch {
+        Write-JujuWarning "AD Group $groupName does not exist."
     }
 
+    Write-JujuInfo "Creating new group: $groupName"
     $group = New-ADGroup -GroupScope DomainLocal -GroupCategory Security `
              -PassThru -Name $groupName -Path $containerDn
-    Write-JujuLog "Finished creating Active Directory Group $Group ."
     return $group
 }
 
@@ -226,7 +217,7 @@ function AssignUserTo-Groups {
     )
 
     foreach ($i in $Groups) {
-        Write-JujuLog "Assigning user $User to group $i"
+        Write-JujuInfo "Assigning user $User to group $i"
         $grp = CreateNew-ADGroup $i
         Add-ADGroupMember $grp $User
     }
@@ -238,11 +229,11 @@ function Create-ADUsersFromRelation {
         $Users
     )
 
-    Write-JujuLog "Users to be created: $Users"
+    Write-JujuInfo "Users to be created: $Users"
     $creds = @{}
     
     foreach($i in $Users.psobject.properties) {
-        Write-JujuLog "Creating AD user $i."
+        Write-JujuInfo "Creating AD user $i."
         $groups = $i.Value
         $details = GetOrCreate-ADUser $i.Name
         $usr = $details[0]
@@ -264,11 +255,10 @@ function AddTo-ComputerADGroup {
         [string]$Group
     )
 
-    Write-JujuLog "Adding computer $ComputerName to AD GROUP $Group..."
+    Write-JujuInfo "Adding computer $ComputerName to AD GROUP $Group"
     $group = CreateNew-ADGroup $Group
     $adhost = Get-ADComputer $ComputerName
     Add-ADGroupMember $group $adhost
-    Write-JujuLog "Finished adding computer $ComputerName to AD GROUP $Group."
 }
 
 function Convert-SIDToFriendlyName {
@@ -329,11 +319,11 @@ function AddTo-LocalGroup {
         try {
             $objGroup.PSBase.Invoke("Add",$objUser.PSBase.Path)
         } catch {
-            Write-JujuLog "$_"
-            Write-JujuLog "Failed to add user $Username to group $groupName"
+            # the -Fatal flag is deprecated.
+            Write-JujuError "Failed to add user $Username to group $groupName" -Fatal $false
+            Throw
         }
     }
-
     return $true
 }
 
@@ -358,7 +348,6 @@ function Add-UserToDomainAdmins {
     $sids = @("S-1-5-32-544", "$domainSID-512", "$domainSID-518", "$domainSID-519")
     foreach ($sid in $sids) {
         $domainGroupName = Convert-SIDToFriendlyName -SID $sid
-        Write-JujuLog $domainGroupName
         Add-ADGroupMember -Members $userToAdd -Identity $domainGroupName `
             -Credential $dccreds -Server $DCName
     }
@@ -443,7 +432,7 @@ function Create-ServicesUsers {
         [HashTable]$ADparams
     )
 
-    Write-JujuLog "Creating AD Users for active-directory DC...."
+    Write-JujuInfo "Creating AD Users for active-directory DC"
 
     $machineName = $computername
     $domain = Get-DomainName $ADparams["ad_domain"]
@@ -454,7 +443,7 @@ function Create-ServicesUsers {
     $isLocalAdmin = Check-Membership $adminUsername $administratorsGroupSID $domain
     $administratorsGroupName = Convert-SIDToFriendlyName $administratorsGroupSID
     if(!$isLocalAdmin) {
-        Write-JujuLog "Adding user to local admins."
+        Write-JujuInfo "Adding user $adminUsername to $administratorsGroupName"
         net.exe localgroup $administratorsGroupName ("$domain\$adminUsername") /add
     }
 
@@ -465,14 +454,13 @@ function Create-ServicesUsers {
             $machineName
     } -RetryInterval 10 -MaxRetryCount 3
     foreach ($userToAdd in $UsersToAdd) {
-        Write-JujuLog "Adding user admin rights..."
+        Write-JujuInfo "Adding user admin rights"
         $userName = $userToAdd["Name"]
         Add-UserToDomainAdmins $defaultAdmin $defaultAdminPassword $domain `
             $dcName $userName
         net.exe localgroup $administratorsGroupName ("$domain\$userName") /add
         Set-UserRunAsRights "$domain\$userName"
     }
-    Write-JujuLog "Finished creating AD Users for active-directory DC."
 }
 
 function Create-ADUsers {

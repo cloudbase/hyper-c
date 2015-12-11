@@ -6,15 +6,20 @@ $ErrorActionPreference = 'Stop'
 try {
     $modulePath = "$PSScriptRoot\hooks.psm1"
     Import-Module -Force -DisableNameChecking $modulePath
+    Import-Module -Force -DisableNameChecking CharmHelpers
 } catch {
-    juju-log.exe "Error while loading modules: $_"
+    $trace = $_.Exception | fl -Force
+    juju-log.exe "Error while loading modules" -l ERROR
+    juju-log.exe $trace -l ERROR
     exit 1
 }
 
 try {
-    juju-log.exe "Running: Run-SetKCD"
+    Write-JujuLog -Message "Running: Run-SetKCD"
     Run-SetKCD
 } catch {
-    juju-log.exe "Error while running main script: $_"
+    $trace = $_.Exception | fl -Force
+    Write-JujuLog "Error while running hyperv-peer-relation-changed.ps1" -LogLevel ERROR
+    Write-JujuLog $trace -LogLevel ERROR
     exit 1
 }

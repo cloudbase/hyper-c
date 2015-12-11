@@ -15,14 +15,12 @@ try {
     Import-Module -Force -DisableNameChecking $hooksPath
     Import-Module -Force -DisableNameChecking CharmHelpers
 
-    juju-log.exe "Running Join-Domain"
+    Write-JujuLog -Message "Running Join-Domain"
     $done = Juju-JoinDomain 
     if($done) {
-        juju-log.exe "Running relation changed"
+        Write-JujuLog -Message "Running relation changed"
         $script = "$psscriptroot\s2d-relation-changed-real.ps1"
-        juju-log.exe "<<<<<<<<<<<<2222222222222222222"
         $creds = Get-CimCredentials
-        juju-log.exe "<<<<<<<<<<<<33333333333333333: $creds"
         $args = @("-File", "$script")
         $exitCode = Start-ProcessAsUser -Command "$PShome\powershell.exe" -Arguments ($args -Join " ") -Credential $creds
         if($exitCode){
@@ -30,7 +28,7 @@ try {
         }
     }
 } catch {
-    juju-log.exe "Failed to join domain $_"
+    Write-JujuLog "Failed to join domain $_" -LogLevel ERROR
     exit 1
 }
 

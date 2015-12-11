@@ -20,7 +20,18 @@ $jujuModulePath = Join-Path $PSScriptRoot "juju.psm1"
 Import-Module -Force -DisableNameChecking $jujuModulePath
 $computername = [System.Net.Dns]::GetHostName()
 
+function Is-NanoServer {
+    $serverLevels = Get-ItemProperty "HKLM:Software\Microsoft\Windows NT\CurrentVersion\Server\ServerLevels"
+    if ($serverLevels.NanoServer -eq 1){
+        return $true
+    }
+    return $false
+}
+
 function Get-JsonParser {
+    if(!(Is-NanoServer)){
+        return $true
+    }
     $json = [System.Reflection.Assembly]::Load("JSON.Silverlight4")
     $jsp = $json.GetTypes() | ? name -match jsonparser
     return $jsp

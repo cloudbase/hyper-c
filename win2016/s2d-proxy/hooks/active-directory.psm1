@@ -21,22 +21,20 @@ function Get-CimCredentials {
     if($cimCreds){
         return $cimCreds
     }
-    juju-log.exe "Fetching active directory context"
+    Write-JujuInfo "Fetching active directory context"
     $ctx = Get-ActiveDirectoryContext
     if(!$ctx.Count) {
         return $false
     }
-    juju-log.exe "Granting privileges on s2duser"
+    Write-JujuInfo "Granting privileges on s2duser"
     GrantPrivileges-OnDomainUser -Username "s2duser" -Domain $ctx["netbiosname"]
 
     $clearPass = $ctx["my_ad_password"]
-    juju-log.exe "Converting string to SecureString"
+    Write-JujuInfo "Converting string to SecureString"
     $passwd = ConvertTo-SecureString -AsPlainText -Force $clearPass
     $usr = ($ctx["netbiosname"] + "\s2duser")
-    juju-log.exe "Generating new credential object using $usr and $clearPass"
     $c = New-Object System.Management.Automation.PSCredential($usr, $passwd)
     Set-Variable -Scope Global -Name cimCreds -Value $c
-    juju-log.exe "Returning creds"
     return $c
 }
 
@@ -52,11 +50,11 @@ function Get-NewCimSession {
     }
     foreach ($node in $nodes){
         try {
-            juju-log.exe "Creating new CIM session on node $node"
+            Write-JujuInfo "Creating new CIM session on node $node"
             $session = New-CimSession -ComputerName $node
             return $session
         } catch {
-            juju-log.exe "Failed to get CIM session on $node`: $_"
+            Write-JujuWarning "Failed to get CIM session on $node`: $_"
             continue
         }
     }
@@ -110,7 +108,7 @@ function Get-ActiveDirectoryContext {
     $relations = relation_ids -reltype "ad-join"
     foreach($rid in $relations){
         $related_units = related_units -relid $rid
-        juju-log.exe "Found related units: $related_units"
+        Write-JujuInfo "Found related units: $related_units"
         if($related_units){
             foreach($unit in $related_units){
                 $already_joined = relation_get -attr "already-joined" -rid $rid -unit $unit
@@ -171,10 +169,10 @@ function GrantPrivileges-OnDomainUser {
     $administratorsGroupSID = "S-1-5-32-544"
     $adminGroup = Convert-SIDToFriendlyName $administratorsGroupSID
 
-    juju-log.exe "Checking if $Username is in $adminGroup"
+    Write-JujuInfo "Checking if $Username is in $adminGroup"
     $isMember = Is-GroupMember -Group $adminGroup -Username $Username
     if (!$isMember){
-        juju-log.exe "Adding $domUser to group $adminGroup"
+        Write-JujuInfo "Adding $domUser to group $adminGroup"
         net localgroup $adminGroup $domUser /add 2>&1 | Out-Null
     }
 }
@@ -192,7 +190,7 @@ function Set-JujudUser {
     $jujuServices = gcim win32_service | Where-Object {$_.Name -like "jujud-*"}
     foreach($i in $jujuServices){
         if ($i.StartName -ne $domUser){
-            juju-log.exe ($i.Name + "has service start name: " + $i.StartName)
+            Write-JujuInfo ($i.Name + "has service start name: " + $i.StartName)
             Change-ServiceLogon -Service $i.Name -UserName $domUser -Password $Password
             $shouldReboot = $true
         }

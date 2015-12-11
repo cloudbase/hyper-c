@@ -21,10 +21,10 @@ try {
     foreach ($rid in $rids){
         $ret = relation_set -rid $rid -relation_settings $relation_set
         if ($ret -eq $false){
-           Write-JujuError "Failed to set amqp relation" -Fatal $false
+           Write-JujuWarning "Failed to set amqp relation"
         }
     }
 }catch{
-    juju-log.exe "Failed to run amqp-relation-joined: $_"
+    Write-JujuLog "Failed to run amqp-relation-joined: $_" -LogLevel ERROR
     exit 1
 }

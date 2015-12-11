@@ -23,12 +23,11 @@ try {
     foreach ($rid in $rids){
         $ret = relation_set -rid $rid -relation_settings $relation_set
         if ($ret -eq $false){
-            Write-JujuError "Failed to set ad-join relation" -Fatal $false
+            Write-JujuWarning "Failed to set ad-join relation"
         }
     }
 } catch {
-    juju-log.exe "Failed to run ad-join-relation-joined: $_"
-    juju-log.exe ($_.Exception|format-list -force)
+    Write-JujuLog "Failed to run ad-join-relation-joined: $_" -LogLevel ERROR
     exit 1
 }
 

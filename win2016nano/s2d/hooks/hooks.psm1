@@ -26,7 +26,7 @@ function Run-S2DRelationChanged {
     foreach($rid in $relations){
         $ret = relation_set -relation_id $rid -relation_settings $relation_set
         if ($ret -eq $false){
-            Write-JujuError "Failed to set s2d relation" -Fatal $false
+            Write-JujuWarning "Failed to set s2d relation"
         }
     }
     
@@ -53,7 +53,7 @@ function Broadcast-Ready {
     foreach ($rid in $rids){
         $ret = relation_set -relation_id $rid -relation_settings $relation_set
         if ($ret -eq $false){
-            Write-JujuError "Failed to set s2d relation" -Fatal $false
+            Write-JujuWarning "Failed to set s2d relation"
         }
     }
 

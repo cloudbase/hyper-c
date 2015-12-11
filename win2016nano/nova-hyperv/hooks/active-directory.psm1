@@ -2,15 +2,10 @@
 # Copyright 2014 Cloudbase Solutions SRL
 #
 
-#if ($env:PSModulePath -eq "") {
 $env:PSModulePath = "${env:ProgramFiles}\WindowsPowerShell\Modules;${env:SystemDrive}\windows\system32\windowspowershell\v1.0\Modules;$env:CHARM_DIR\lib\Modules"
 import-module Microsoft.PowerShell.Management
 import-module Microsoft.PowerShell.Utility
 $computername = [System.Net.Dns]::GetHostName()
-
-#}else{
-#    $env:PSModulePath += ";$env:CHARM_DIR\lib\Modules"
-#}
 
 $ErrorActionPreference = 'Stop'
 $nova_compute = "nova-compute"
@@ -149,7 +144,7 @@ function Set-NovaUser {
 }
 
 function Invoke-Djoin {    
-    Juju-Log "Started Join Domain"
+    Write-JujuInfo "Started Join Domain"
     $networkName = (Get-MainNetadapter)
     Set-DnsClientServerAddress -InterfaceAlias $networkName -ServerAddresses $params["ip_address"]
     ipconfig /flushdns
@@ -178,7 +173,7 @@ function Set-ExtraRelationParams {
     }
     $ret = relation_set -relation_settings $relation_set
     if ($ret -eq $false){
-       Write-JujuError "Failed to set extra relation params" -Fatal $false
+       Write-JujuWarning "Failed to set extra relation params"
     }
 }
 
@@ -195,9 +190,8 @@ function Ping-Subordonate {
         "ready"=$ready;
     }
     $relations = relation_ids -reltype 's2d'
-    juju-log.exe "Found relations $relations"
+    Write-JujuInfo "Found relations $relations"
     foreach($rid in $relations){
-        juju-log.exe "relation_set -relation_settings $relation_set -rid $rid"
         $ready = relation_set -relation_settings $relation_set -rid $rid
     }
 }
@@ -212,18 +206,15 @@ function Join-Domain{
             Set-ExtraRelationParams
             $username = "nova-hyperv"
             $pass = $params["my_ad_password"]
-            Juju-Log "Got password $pass from relation"
             Stop-Service $nova_compute
-            Juju-Log "Setting nova user"
+            Write-JujuInfo "Setting nova user"
             Set-NovaUser -Username $username -Password $pass -Domain $params['netbiosname']
             Start-Service $nova_compute
             Ping-Subordonate
         }
     } else {
-        Juju-Log "ad-join returned EMPTY"
+        Write-JujuWarning "ad-join returned EMPTY. Peer not yet ready?"
     }
 }
 
 Export-ModuleMember -Function *
-
-

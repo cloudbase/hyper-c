@@ -222,9 +222,9 @@ function ExecuteWith-Retry {
             $retryCount++
             if ($retryCount -gt $MaxRetryCount) {
                 $ErrorActionPreference = $currentErrorActionPreference
-                throw $_.Exception
+                throw
             } else {
-                Write-Error $_.Exception
+                Write-JujuLog -Message ($_.Exception | fl -Force) -LogLevel WARNING
                 Start-Sleep $RetryInterval
             }
         }
