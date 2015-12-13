@@ -1,18 +1,15 @@
 #
 # Copyright 2014 Cloudbase Solutions SRL
 #
+
+$ErrorActionPreference = 'Stop'
+
 try {
     $modulePath = "$PSScriptRoot\hooks.psm1"
     Import-Module -Force -DisableNameChecking $modulePath
-} catch {
-    Write-JujuLog "Error while loading modules: $_" -LogLevel ERROR
-    exit 1
-}
 
-
-try {
     Broadcast-Ready
 } catch {
-    Write-JujuLog "Error while running config-changed: $_" -LogLevel ERROR
+    Write-HookTracebackToLog $_
     exit 1
 }

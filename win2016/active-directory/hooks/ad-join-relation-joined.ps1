@@ -3,17 +3,13 @@
 #
 $ErrorActionPreference = 'Stop'
 
+
 try {
     $modulePath = "$PSScriptRoot\active-directory-common.psm1"
     Import-Module -Force -DisableNameChecking $modulePath
-} catch {
-    Write-JujuLog "Error while loading modules: $_" -LogLevel ERROR
-    exit 1
-}
 
-try {
     Run-ADRelationJoinedHook
 } catch {
-    Write-JujuLog "Error while running main script: $_" -LogLevel ERROR
+    Write-HookTracebackToLog $_
     exit 1
 }

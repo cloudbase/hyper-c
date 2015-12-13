@@ -174,12 +174,12 @@ function Set-JujuRelation {
        $cmd += $i.Name + "='" + $i.Value + "'"
     }
     try {
-        return Execute-Command $cmd
+        Execute-Command $cmd
     } catch {
         return $false
     }
 
-    return $false
+    return $true
 }
 
 function Get-JujuRelationIds {

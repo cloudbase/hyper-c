@@ -27,6 +27,6 @@ try {
 
     Join-Domain
 } catch {
-    Write-JujuLog "Failed to run ad-join-relation-changed: $_" -LogLevel ERROR
+    Write-HookTracebackToLog $_
     exit 1
 }

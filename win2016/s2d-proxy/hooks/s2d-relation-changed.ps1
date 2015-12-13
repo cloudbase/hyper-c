@@ -28,7 +28,7 @@ try {
         Throw "Failed run $script --> $exitCode"
     }
 } catch {
-    Write-JujuLog "Failed to run s2d-relation-changed.ps1: $_" -LogLevel ERROR
+    Write-HookTracebackToLog $_
     exit 1
 }
 

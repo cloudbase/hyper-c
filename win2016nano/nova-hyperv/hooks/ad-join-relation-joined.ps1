@@ -27,7 +27,7 @@ try {
         }
     }
 } catch {
-    Write-JujuLog "Failed to run ad-join-relation-joined: $_" -LogLevel ERROR
+    Write-HookTracebackToLog $_
     exit 1
 }
 

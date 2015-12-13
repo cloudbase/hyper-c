@@ -25,6 +25,6 @@ try {
         }
     }
 }catch{
-    Write-JujuLog "Failed to run amqp-relation-joined: $_" -LogLevel ERROR
+    Write-HookTracebackToLog $_
     exit 1
 }

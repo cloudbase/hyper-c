@@ -28,7 +28,7 @@ try {
         }
     }
 } catch {
-    Write-JujuLog "Failed to join domain $_" -LogLevel ERROR
+    Write-HookTracebackToLog $_
     exit 1
 }
 

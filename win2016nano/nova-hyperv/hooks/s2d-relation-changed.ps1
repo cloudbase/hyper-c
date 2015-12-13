@@ -7,14 +7,9 @@ $ErrorActionPreference = "Stop"
 
 try {
     Import-Module -Force -DisableNameChecking "$psscriptroot\compute-hooks.psm1"
-}catch{
-    Write-JujuLog "Failed to import modules: $_" -LogLevel ERROR
-    exit 1
-}
-
-try {
+    
     Run-ConfigChanged
 } catch {
-    Write-JujuLog "Failed to run s2d-container-relation-changed: $_" -LogLevel ERROR
+    Write-HookTracebackToLog $_
     exit 1
 }

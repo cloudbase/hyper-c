@@ -8,14 +8,9 @@ $ErrorActionPreference = "Stop"
 try {
     Import-Module -DisableNameChecking CharmHelpers
     Import-Module -Force -DisableNameChecking "$psscriptroot\compute-hooks.psm1"
-}catch{
-    Write-JujuLog "Failed to import modules: $_" -LogLevel ERROR
-    exit 1
-}
 
-try {
     Run-ConfigChanged
 } catch {
-    Write-JujuLog "Failed to run image-service-relation-changed: $_" -LogLevel ERROR
+    Write-HookTracebackToLog $_
     exit 1
 }

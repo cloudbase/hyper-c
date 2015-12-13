@@ -4,10 +4,12 @@
 
 $ErrorActionPreference = "Stop"
 
+Import-Module -DisableNameChecking CharmHelpers
+
 try {
     Import-Module -Force -DisableNameChecking "$psscriptroot\compute-hooks.psm1"
 }catch {
-    juju-log.exe "Failed to run install: $_"
+    Write-HookTracebackToLog $_
     exit 1
 }
 
@@ -41,6 +43,6 @@ function Juju-RunInstall {
 try{
     Juju-RunInstall
 }catch{
-    Write-JujuLog "Failed to run install: $_" -LogLevel ERROR
+    Write-HookTracebackToLog $_
     exit 1
 }
