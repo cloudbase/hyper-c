@@ -240,21 +240,28 @@ function Execute-ExternalCommand {
 
 function Write-HookTracebackToLog {
     Param (
-        [System.Management.Automation.ErrorRecord]$ErrorRecord=$null
+        [Parameter(Mandatory=$true)]
+        [System.Management.Automation.ErrorRecord]$ErrorRecord,
+        [string]$LogLevel="ERROR"
     )
     $name = $MyInvocation.PSCommandPath
-    Write-JujuLog "Error while running $name" -LogLevel ERROR
-    Write-JujuLog (Get-CallStack $ErrorRecord) -LogLevel ERROR
+    Write-JujuLog "Error while running $name" -LogLevel $LogLevel
+    $info = Get-CallStack $ErrorRecord
+    foreach ($i in $info){
+        Write-JujuLog $i -LogLevel $LogLevel
+    }
 }
 
 function Get-CallStack {
     Param (
-        [System.Management.Automation.ErrorRecord]$ErrorRecord=$null
+        [Parameter(Mandatory=$true)]
+        [System.Management.Automation.ErrorRecord]$ErrorRecord
     )
     $message = $ErrorRecord.Exception.Message
     $position = $ErrorRecord.InvocationInfo.PositionMessage
     $trace = $ErrorRecord.ScriptStackTrace
-    return "{0}`n{1}`n{2}" -f @($message, $position, $trace)
+    $info = @($message, $position, $trace)
+    return $info
 }
 
 function ExecuteWith-Retry {
@@ -281,7 +288,7 @@ function ExecuteWith-Retry {
                 $ErrorActionPreference = $currentErrorActionPreference
                 throw
             } else {
-                Write-JujuWarning (Get-CallStack $_)
+                Write-HookTracebackToLog $_ -LogLevel WARNING
                 Start-Sleep $RetryInterval
             }
         }

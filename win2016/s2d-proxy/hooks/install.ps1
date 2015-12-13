@@ -10,7 +10,7 @@ try {
     }
     Enable-WindowsOptionalFeature -Online -FeatureName "ActiveDirectory-Powershell" -All
 } catch {
-    Write-JujuLog "Error while running main script: $_" -LogLevel ERROR
+    Write-HookTracebackToLog $_
     exit 1
 }
 
