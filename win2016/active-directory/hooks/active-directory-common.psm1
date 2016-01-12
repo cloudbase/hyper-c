@@ -4,8 +4,13 @@
 $ErrorActionPreference = 'Stop'
 $computername = [System.Net.Dns]::GetHostName()
 
-$charmHelpers = Join-Path $PSScriptRoot "Modules\CharmHelpers"
-Import-Module -Force -DisableNameChecking $charmHelpers
+# $charmHelpers = Join-Path $PSScriptRoot "Modules\CharmHelpers"
+# Import-Module -Force -DisableNameChecking $charmHelpers
+Import-Module JujuLoging
+Import-Module JujuHooks
+Import-Module JujuUtils
+Import-Module JujuWindowsUtils
+Import-Module ADCharmUtils
 
 $WINDOWS_FEATURES = @( 'AD-Domain-Services',
                        'RSAT-AD-Tools',
@@ -19,51 +24,18 @@ $WINDOWS_FEATURES = @( 'AD-Domain-Services',
 $ADUserSection = "ADCharmUsers"
 
 
-function Set-JujuStatus {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [ValidatePattern("^\w+$")]
-        [ValidateSet("maintenance", "blocked", "waiting", "active")]
-        [string]$Status=$null
-    )
-
-    $cmd = @("status-set.exe", $Status)
-    try {
-        if ((Get-JujuStatus) -ne $Status) {
-            return Execute-Command -Cmd $cmd
-        }
-    } catch {
-        return $false
-    }
-}
-
-function Get-JujuStatus {
-    $cmd = @("status-get.exe", "--format=json")
-    try {
-        $result = Execute-Command -Cmd $cmd | ConvertFrom-Json
-    } catch {
-        return $false
-    }
-
-    if ($result) {
-        return $result["status"]
-    }
-}
-
 function Run-TimeResync {
-    Param()
-    tzutil.exe /s "UTC" 
-    if ($LastExitCode){
-        Throw "Failed to set timezone"
-    }
     Write-JujuInfo "Synchronizing time..."
+    $ts = @("tzutil.exe", "/s", "UTC")
+    Invoke-JujuCommand -Command $ts
+
     try {
         Start-Service "w32time"
-        Execute-ExternalCommand {
-            w32tm.exe /config /manualpeerlist:time.windows.com /syncfromflags:manual /update
-        }
+        $manualTS = @("w32tm.exe", "/config", "/manualpeerlist:time.windows.com", "/syncfromflags:manual", "/update")
+        Invoke-JujuCommand -Command $manualTS
     } catch {
-        Write-JujuError "Failed to synchronize time..." -Fatal $false
+        # not a fatal error
+        Write-JujuErr "Failed to synchronize time: $_"
     }
 }
 
@@ -78,7 +50,7 @@ function CreateNew-ADUser {
     if (!$dn) {
         Throw "Could not get DistinguishedName."
     }
-    $passwd = Generate-StrongPassword
+    $passwd = Get-RandomString -Length 20
     $secPass = ConvertTo-SecureString -AsPlainText $passwd -Force
     $adPath = "CN=Users," + $dn
 
@@ -92,27 +64,6 @@ function CreateNew-ADUser {
 
     Write-JujuInfo "Finished creating AD user."
     return @($usr, $passwd)
-}
-
-function Check-Membership {
-    Param (
-        [Parameter(Mandatory=$true)]
-        [string]$User,
-        [Parameter(Mandatory=$true)]
-        [string]$GroupSID,
-        [Parameter(Mandatory=$false)]
-        [string]$Domain
-    )
-
-    if (!$Domain) {
-        $Domain = $computername
-    }
-    $group = Get-CimInstance -ClassName Win32_Group  `
-                -Filter "SID = '$GroupSID'"
-    $ret = Get-CimAssociatedInstance -InputObject $group `
-        -ResultClassName Win32_UserAccount | Where-Object `
-        { $_.Name -eq $User -and $_.Domain -eq $Domain}
-    return $ret
 }
 
 function GetOrCreate-ADUser {
@@ -132,13 +83,12 @@ function GetOrCreate-ADUser {
         if(!$cachedPass){
             Throw "Failed to get cached password for user $Username"
         }
-        Write-JujuInfo "Finished getting/creating AD user..."
         return @($usr, $cachedPass)
-    } else {
-        $details = CreateNew-ADUser $Username
-        SetBlob-ToLeader -Name $keyName -Blob $details[1]
-        return $details
-    }
+    } 
+    Write-JujuInfo "Creating new AD user: $Username"
+    $details = CreateNew-ADUser $Username
+    SetBlob-ToLeader -Name $keyName -Blob $details[1]
+    return $details
 }
 
 #Creates an Active Directory Organizational Unit
@@ -226,13 +176,13 @@ function AssignUserTo-Groups {
 function Create-ADUsersFromRelation {
     Param (
         [parameter(Mandatory=$true)]
-        $Users
+        [hashtable]$Users
     )
 
     Write-JujuInfo "Users to be created: $Users"
     $creds = @{}
     
-    foreach($i in $Users.psobject.properties) {
+    foreach($i in $Users.GetEnumerator()) {
         Write-JujuInfo "Creating AD user $i."
         $groups = $i.Value
         $details = GetOrCreate-ADUser $i.Name
@@ -243,7 +193,6 @@ function Create-ADUsersFromRelation {
             AssignUserTo-Groups $details[0] $groups
         }
     }
-
     return $creds
 }
 
@@ -259,22 +208,6 @@ function AddTo-ComputerADGroup {
     $group = CreateNew-ADGroup $Group
     $adhost = Get-ADComputer $ComputerName
     Add-ADGroupMember $group $adhost
-}
-
-function Convert-SIDToFriendlyName {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [string]$SID
-    )
-
-    $objSID = New-Object System.Security.Principal.SecurityIdentifier($SID)
-    $objUser = $objSID.Translate( [System.Security.Principal.NTAccount])
-    $name = $objUser.Value
-    $n = $name.Split("\")
-    if ($n.length -gt 1){
-        return $n[1]
-    }
-    return $n[0]
 }
 
 function Normalize-User {
@@ -310,8 +243,8 @@ function AddTo-LocalGroup {
     $domain = $usrSplit[0]
     $user = $usrSplit[1]
 
-    $isMember = Check-Membership -User $Username -Group $GroupSID
-    $groupName = Convert-SIDToFriendlyName -SID $GroupSID
+    $isMember = Get-UserGroupMembership -Username $Username -GroupSID $GroupSID
+    $groupName = Get-GroupNameFromSID -SID $GroupSID
 
     if (!$isMember) {
         $objUser = [ADSI]("WinNT://$domain/$user")
@@ -347,7 +280,7 @@ function Add-UserToDomainAdmins {
     # "Administrators", "Domain Admin", "Schema admin", "Enterprise admin" group SID
     $sids = @("S-1-5-32-544", "$domainSID-512", "$domainSID-518", "$domainSID-519")
     foreach ($sid in $sids) {
-        $domainGroupName = Convert-SIDToFriendlyName -SID $sid
+        $domainGroupName = Get-GroupNameFromSID -SID $sid
         Add-ADGroupMember -Members $userToAdd -Identity $domainGroupName `
             -Credential $dccreds -Server $DCName
     }
@@ -358,69 +291,11 @@ function Get-StrippedUsername {
         [parameter(Mandatory=$true)]
         [string]$ShortUsername
     )
-
-    $hostName = Execute-ExternalCommand -Command {
-        HOSTNAME.EXE
-    } -ErrorMessage "Failed to get hostname"
-
-    $username = $ShortUsername + "-" + $hostName
+    $username = $ShortUsername + "-" + $computername
     if($username.Length -gt 20){
         return $username.Substring(0, 20)
     } else {
         return $username
-    }
-}
-
-function Change-ServicesLogons {
-    Param(
-        [parameter(Mandatory=$true)]
-        [HashTable]$ADparams
-    )
-
-    $domain = Get-DomainName $ADparams["ad_domain"]
-    $jujuUsername = Get-StrippedUsername "juju"
-    $cbsinitUsername = Get-StrippedUsername "cbs"
-    $cbsUserPassword = Generate-StrongPassword
-    $jujuUserPassword = Generate-StrongPassword
-    $usersToAdd = @( @{"Name"=$cbsinitUsername;"Password" = $cbsUserPassword},
-                     @{"Name"=$jujuUsername;"Password" = $jujuUserPassword} )
-    Create-ServicesUsers $usersToAdd $ADparams
-    Change-CBSServicesLogon "$domain\$jujuUsername" "$domain\$cbsinitUsername" `
-        $jujuUserPassword $cbsUserPassword
-}
-
-function Change-CBSServicesLogon {
-    Param(
-        [parameter(Mandatory=$true)]
-        [string]$jujuUser,
-        [parameter(Mandatory=$true)]
-        [string]$cbsUser,
-        [string]$jujuPass,
-        [string]$cbsPass
-    )
-    $jujuServices = Get-WmiObject Win32_Service | Where {$_.Name -Match 'juju'}
-    if ($jujuServices) {
-        Change-ServiceLogon $jujuServices $jujuUser $jujuPass
-    }
-    $cbsServices = Get-WmiObject Win32_Service | Where {$_.Name -Match 'cloudbase'}
-    if ($cbsServices) {
-        Change-ServiceLogon $cbsServices $cbsUser $cbsPass
-    }
-
-    $rights = ":(OI)(CI)(M)"
-    $cbsRights = $cbsUser + $rights
-    $jujuRights = $jujuUser + $rights
-    $cbsFolder = Join-Path ${env:ProgramFiles(x86)} "Cloudbase Solutions"
-    $jujuFolder = Join-Path $env:SystemDrive "Juju"
-    if((Test-Path $cbsFolder) -and $cbsPass) {
-        Execute-ExternalCommand -Command {
-            icacls $cbsFolder /grant $cbsRights
-        } -ErrorMessage "Failed to set permissions for $cbsFolder ."
-    }
-    if((Test-Path $jujuFolder) -and $jujuPass) {
-        Execute-ExternalCommand -Command {
-            icacls $jujuFolder /grant $jujuRights
-        } -ErrorMessage "Failed to set permissions for $jujuFolder ."
     }
 }
 
@@ -440,25 +315,31 @@ function Create-ServicesUsers {
     $adminPassword = $ADparams["ad_password"]
     $dcName = $ADparams["ad_hostname"]
     $administratorsGroupSID = "S-1-5-32-544"
-    $isLocalAdmin = Check-Membership $adminUsername $administratorsGroupSID $domain
-    $administratorsGroupName = Convert-SIDToFriendlyName $administratorsGroupSID
+    $isLocalAdmin = Get-UserGroupMembership -Username $adminUsername -GroupSID $administratorsGroupSID
+    $administratorsGroupName = Get-GroupNameFromSID -SID $administratorsGroupSID
+
     if(!$isLocalAdmin) {
         Write-JujuInfo "Adding user $adminUsername to $administratorsGroupName"
-        net.exe localgroup $administratorsGroupName ("$domain\$adminUsername") /add
+        $admUsr = "$domain\$adminUsername"
+        $cmd = @("net.exe", "localgroup", "$administratorsGroupName", "$admUsr", "/add")
+        Invoke-JujuCommand -Command $cmd
     }
 
     $defaultAdminPassword = Get-JujuCharmConfig -Scope "default-administrator-password"
-    $defaultAdmin = Get-DefaultLocalAdministrator
-    ExecuteWith-Retry {
-        Create-ADUsers $UsersToAdd $defaultAdmin $defaultAdminPassword $domain $dcName `
-            $machineName
+    $defaultAdmin = Get-AdministratorAccount
+
+    Start-ExecuteWithRetry {
+        Create-ADUsers $UsersToAdd $defaultAdmin $defaultAdminPassword $domain $dcName $machineName
     } -RetryInterval 10 -MaxRetryCount 3
+
     foreach ($userToAdd in $UsersToAdd) {
         Write-JujuInfo "Adding user admin rights"
         $userName = $userToAdd["Name"]
         Add-UserToDomainAdmins $defaultAdmin $defaultAdminPassword $domain `
             $dcName $userName
-        net.exe localgroup $administratorsGroupName ("$domain\$userName") /add
+        $u = "$domain\$userName"
+        $cmd = @("net.exe", "localgroup", $administratorsGroupName, $u, "/add")
+        Invoke-JujuCommand -Command $cmd
         Set-UserRunAsRights "$domain\$userName"
     }
 }
@@ -480,21 +361,15 @@ function Create-ADUsers {
     )
 
     $dcsecpassword = ConvertTo-SecureString $AdminPassword -AsPlainText -Force
-    $dccreds = `
-        New-Object System.Management.Automation.PSCredential("$Domain\$AdminUsername", $dcsecpassword)
+    $dccreds = New-Object System.Management.Automation.PSCredential("$Domain\$AdminUsername", $dcsecpassword)
 
     foreach($user in $UsersToAdd){
         $username = $user['Name']
         $password = $user['Password']
-        $alreadyUser = $False
-        try {
-            $alreadyUser = (Get-ADUser $username -Credential $dccreds) -ne $Null
-        } catch {
-            Write-JujuError "Could not get ad user" -Fatal $false
-        }
+        $alreadyUser = (Get-ADUser $username -Credential $dccreds -ErrorAction SilentlyContinue) -ne $Null
 
         $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
-        if ($alreadyUser -eq $False) {
+        if (!$alreadyUser) {
             $Description = "AD user"
             Write-JujuLog "Create new user"
             New-ADUser -Name $username -AccountPassword $securePassword `
@@ -508,8 +383,6 @@ function Create-ADUsers {
 }
 
 function Get-ADRelationMap {
-    Param()
-
     return @{
         "ad_host" = "private-address";
         "ip_address" = "address";
@@ -521,27 +394,21 @@ function Get-ADRelationMap {
 }
 
 function Get-RelationParams {
-    Param($Type)
-
-    switch ($Type) {
-        'add-controller' {
-            return (Get-JujuRelationParams $Type (Get-ADRelationMap))
-        }
-        default {
-            throw "Unsupported relation."
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$true,ValueFromPipeline=$true)]
+        [string]$Type
+    )
+    PROCESS {
+        switch ($Type) {
+            'add-controller' {
+                return (Get-JujuRelationParams $Type (Get-ADRelationMap))
+            }
+            default {
+                throw "Unsupported relation."
+            }
         }
     }
-}
-
-function Is-Leader {
-    return $true
-    $cmd = @("is-leader.exe", "--format=json")
-    try {
-        return Execute-Command -Cmd $cmd | ConvertFrom-Json
-    } catch {
-        Write-JujuError "Failed to run is-leader.exe" -Fatal $true
-    }
-
 }
 
 function Get-ActiveDirectoryFirewallContext {
@@ -552,7 +419,7 @@ function Get-ActiveDirectoryFirewallContext {
     }
 
     $openAllPorts = Get-JujuCharmConfig -Scope "open-all-active-directory-ports"
-    if (!$openAllPorts -or ($openAllPorts -eq "False")) {
+    if (!$openAllPorts) {
         return $basePorts
     }
     $basePorts["TCP"] += @(3269, 3268, 445, 25, 135, 5722, 9389, 139)
@@ -563,10 +430,17 @@ function Get-ActiveDirectoryFirewallContext {
 function Prepare-ADInstall {
     Write-JujuLog "Preparing AD install..."
 
-    Rename-Hostname
-    $shouldReboot = Install-Certificate
+    $netbiosName = Convert-JujuUnitNameToNetbios
+    $shouldReboot = $false
+    if ($computername -ne $netbiosName) {
+        Rename-Computer -NewName $netbiosName
+        $shouldReboot = $true
+    }
+    if((Install-Certificate)) {
+        $shouldReboot = $true
+    }
     if ($shouldReboot) {
-        ExitFrom-JujuHook -WithReboot
+        Invoke-JujuReboot -Now
     }
     try {
         Install-WindowsFeatures $WINDOWS_FEATURES
@@ -577,20 +451,6 @@ function Prepare-ADInstall {
     Write-JujuLog "Finished preparing AD install."
 }
 
-function Get-DefaultLocalAdministrator {
-    $administratorsGroupSID = "S-1-5-32-544"
-    $group = Get-CimInstance -ClassName Win32_Group  `
-                -Filter "SID = '$administratorsGroupSID'"
-    $localAdministrator = Get-CimAssociatedInstance -InputObject $group `
-        -ResultClassName Win32_UserAccount | Where-Object `
-        { $_.SID.StartsWith("S-1-5-21") -and $_.SID.EndsWith("-500") }
-    if ($localAdministrator) {
-        return $localAdministrator.Name
-    } else {
-        Write-JujuError "Failed to get default local administrator"
-    }
-}
-
 function Install-ADForest {
     Param()
 
@@ -598,12 +458,11 @@ function Install-ADForest {
 
     $fullDomainName = Get-JujuCharmConfig -Scope 'domain-name'
     $defaultDomainUser = Get-JujuCharmConfig -Scope 'default-domain-user'
-    $defaultAdministratorPassword = `
-        Get-JujuCharmConfig -Scope 'default-administrator-password'
-    $defaultDomainUserPassword = `
-        Get-JujuCharmConfig -Scope 'default-domain-user-password'
-    $localAdministrator = Get-DefaultLocalAdministrator
+    $defaultAdministratorPassword = Get-JujuCharmConfig -Scope 'default-administrator-password'
+    $defaultDomainUserPassword = Get-JujuCharmConfig -Scope 'default-domain-user-password'
+    $localAdministrator = Get-AdministratorAccount
     $domainName = Get-DomainName $fullDomainName
+
     if (Is-DomainInstalled $fullDomainName) {
         Write-JujuLog "AD is already installed."
         $dcName = $computername
@@ -611,6 +470,7 @@ function Install-ADForest {
             $dcName $defaultDomainUser
         return
     }
+
     if (Is-InDomain $fullDomainName) {
         Write-JujuLog "Machine cannot reinstall the forest."
         return $false
@@ -621,15 +481,14 @@ function Install-ADForest {
         Add-WindowsUser $localAdministrator $defaultAdministratorPassword
     }
 
-    ExecuteWith-Retry -Command {
-        Create-LocalAdmin $defaultDomainUser $defaultDomainUserPassword
+    Start-ExecuteWithRetry -Command {
+        New-LocalAdmin -Username $defaultDomainUser -Password $defaultDomainUserPassword
     } -MaxRetryCount 5 -RetryInterval 10
 
     $safeModePassword = Get-JujuCharmConfig -Scope 'safe-mode-password'
-    $safeModePasswordSecure = ConvertTo-SecureString `
-        -String $safeModePassword -AsPlainText -Force
+    $safeModePasswordSecure = ConvertTo-SecureString -String $safeModePassword -AsPlainText -Force
 
-    $forestInstalled = ExecuteWith-Retry {
+    $forestInstalled = Start-ExecuteWithRetry {
         try {
             Install-ADDSForest -DomainName $fullDomainName `
                -DomainNetbiosName $domainName `
@@ -638,9 +497,10 @@ function Install-ADForest {
         } catch {
             $domainAlreadyInUse = $_.Exception.Message -match "already in use"
             if (!$domainAlreadyInUse) {
-                Write-JujuError -Fatal $true "Failed to install forest: $_"
+                Write-JujuErr "Failed to install forest: $_"
+                Throw
             }
-            Write-JujuError -Fatal $false "Domain already in use. Skipping..."
+            Write-JujuErr "Domain already in use. Skipping..."
             return $false
         }
         return $true
@@ -649,67 +509,67 @@ function Install-ADForest {
     if (!$forestInstalled) {
         return
     }
-    Set-CharmState "ADController" "IsInstalled" "True"
+    Set-CharmState -Namespace "ADController" -Key "IsInstalled" -Value "True"
     Write-JujuLog "Finished installing Forest..."
-    ExitFrom-JujuHook -WithReboot
+    Invoke-JujuReboot -Now
 }
 
 function Add-DNSForwarders {
-    $nameservers = Get-PrimaryAdapterDNSServers
-    $nameservers = $nameservers | Where-Object { $_ -ne "127.0.0.1" }
+    $nameservers = Get-PrimaryAdapterDNSServers | Where-Object { $_ -ne "127.0.0.1" }
     Write-JujuLog "Nameservers are: $nameservers"
+
     if (!$nameservers) {
         Write-JujuLog "No nameservers to add."
         return
     }
-    ExecuteWith-Retry {
+
+    Start-ExecuteWithRetry {
         $hostname = $computername
-        Execute-ExternalCommand {
-            dnscmd.exe $hostname /resetforwarders $nameservers
-        }
+        $cmd = @("dnscmd.exe", $hostname, "/resetforwarders", $nameservers)
+        Invoke-JujuCommand -Command $cmd
     } -MaxRetryCount 3 -RetryInterval 30
 }
 
 function Main-Slave {
-    Param($ADParams)
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$ADParams
+    )
+    PROCESS {
+        Write-JujuLog "Executing main slave..."
+        if (!(Is-InDomain $ADParams['ad_domain'])) {
+            ConnectTo-ADController $ADParams
+            Invoke-JujuReboot -Now
+        }
+        $domain = Get-DomainName $ADParams["ad_domain"]
 
-    Write-JujuLog "Executing main slave..."
-    if (!(Is-InDomain $ADParams['ad_domain'])) {
-        ConnectTo-ADController $ADParams
-        ExitFrom-JujuHook -WithReboot
+        $safeModePassword = Get-JujuCharmConfig -Scope "safe-mode-password"
+        $safeModePasswordSecure = ConvertTo-SecureString $safeModePassword -AsPlainText -Force
+
+        $adminPassword = Get-JujuCharmConfig -Scope "default-administrator-password"
+        $dcsecpassword = ConvertTo-SecureString $adminPassword -AsPlainText -Force
+        $domain = Get-DomainName $ADParams["ad_domain"]
+        $adminUsername = Get-AdministratorAccount
+        $adCredential = New-Object System.Management.Automation.PSCredential("$domain\$adminUsername", $dcsecpassword)
+
+        Add-DNSForwarders
+        Start-ExecuteWithRetry {
+            Install-ADDSDomainController -NoGlobalCatalog:$false `
+                -InstallDns:$true -CreateDnsDelegation:$false `
+                -CriticalReplicationOnly:$false -DomainName $domain `
+                -SafeModeAdministratorPassword:$safeModePasswordSecure `
+                -NoRebootOnCompletion:$true -Credential $adCredential -Force
+        } -MaxRetryCount 3 -RetryInterval 30
+        Set-CharmState "ADController" "IsInstalled" "True"
+
+        Invoke-JujuReboot -Now
     }
-    $domain = Get-DomainName $ADParams["ad_domain"]
-    ExecuteWith-Retry {
-        Change-ServicesLogons $ADParams
-    } -MaxRetryCount 20 -RetryInterval 30
-
-
-    $safeModePassword = Get-JujuCharmConfig -Scope "safe-mode-password"
-    $safeModePasswordSecure = ConvertTo-SecureString $safeModePassword `
-        -AsPlainText -Force
-
-    $adminPassword = Get-JujuCharmConfig -Scope "default-administrator-password"
-    $dcsecpassword = ConvertTo-SecureString $adminPassword -AsPlainText -Force
-    $domain = Get-DomainName $ADParams["ad_domain"]
-    $adminUsername = Get-DefaultLocalAdministrator
-    $adCredential = `
-        New-Object System.Management.Automation.PSCredential("$domain\$adminUsername", $dcsecpassword)
-
-    Add-DNSForwarders
-    ExecuteWith-Retry {
-        Install-ADDSDomainController -NoGlobalCatalog:$false `
-            -InstallDns:$true -CreateDnsDelegation:$false `
-            -CriticalReplicationOnly:$false -DomainName $domain `
-            -SafeModeAdministratorPassword:$safeModePasswordSecure `
-            -NoRebootOnCompletion:$true -Credential $adCredential -Force
-    } -MaxRetryCount 3 -RetryInterval 30
-    Set-CharmState "ADController" "IsInstalled" "True"
-
-    ExitFrom-JujuHook -WithReboot
 }
 
 function Is-DomainInstalled {
     Param(
+        [Parameter(Mandatory=$true)]
         [string]$fullDomainName
     )
 
@@ -717,37 +577,33 @@ function Is-DomainInstalled {
     if (!$isAdControllerInstalled) {
         return $false
     }
-    $runningServiceCode = ExecuteWith-Retry {
+    $runningServiceCode = Start-ExecuteWithRetry {
         Add-Type -Assemblyname System.ServiceProcess
         return [System.ServiceProcess.ServiceControllerStatus]::GetValues("System.ServiceProcess.ServiceControllerStatus")[3]
     } -MaxRetryCount 3 -RetryInterval 30
     $isForestInstalled = $true
     try {
         $services = $("ADWS","NTDS")
-        ExecuteWith-Retry {
+        Start-ExecuteWithRetry {
             foreach ($service in $services) {
                 $status = (Get-Service $service).Status
                 if (!($status.Equals($runningServiceCode))) {
-                    Write-JujuError "Service $service is not running." -Fatal $true
-                } else {
-                    Write-JujuLog "Service $service is running with status $status."
+                    Throw "Service $service is not running."
                 }
             }
         } -MaxRetryCount 4 -RetryInterval 30
         $forestName = (Get-ADForest).Name
-        if ($forestName -eq $fullDomainName) {
-            Write-JujuLog "AD Domain already installed."
-        } else {
+        if ($forestName -ne $fullDomainName) {
             Write-JujuLog "Forest name: $forestName"
             Write-JujuLog "AD Domain not installed."
             $isForestInstalled = $false
         }
     } catch {
-        Write-JujuLog "Failed to check if AD Domain is installed."
-        Write-JujuLog "$_"
+        Write-JujuErr "Failed to check if AD Domain is installed."
+        Write-JujuErr "$_"
         $isForestInstalled = $false
     }
-    return ($isForestInstalled)
+    return $isForestInstalled
 }
 
 function Set-AdminOnlyACL {
@@ -778,18 +634,7 @@ function Set-AdminOnlyACL {
     Set-ACL $Path $acl
 }
 
-function Generate-FQDN {
-    Param()
-
-    $unit_name = Get-JujuUnitName
-    $domain_name = charm_config -scope "domain-name"
-    $fqdn = $unit_name + "." + $domain_name
-    return $fqdn
-}
-
 function Create-CA {
-    Param()
-
     $base_dir="C:\OpenSSL-Win32\"
     $ca_dir="$base_dir\CA"
 
@@ -834,23 +679,26 @@ function Create-CA {
     Copy-Item $env:CHARM_DIR\files\configs\* $ca_dir
 
     $ENV:OPENSSL_CONF="$ca_dir\ca.cnf"
-    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -out $certs_dir\ca.pem -outform PEM -keyout $private_dir\ca.key
-    if ($LastExitCode) {
-        throw "openssl failed to create CA certificate"
-    }
+    $cmd = @("openssl", "req", "-x509", "-nodes", "-days", "3650", "-newkey", "rsa:2048",
+             "-out", "$certs_dir\ca.pem", "-outform", "PEM", "-keyout", "$private_dir\ca.key")
+    Invoke-JujuCommand -Command $cmd
 
     $ENV:OPENSSL_CONF="$ca_dir\openssl.cnf"
-    $fqdn = Generate-FQDN
-    openssl req -newkey rsa:2048 -nodes -sha1 -keyout $private_dir\cert.key -keyform PEM -out $certs_dir\cert.req -outform PEM -subj "/C=US/ST=Washington/L=Seattle/emailAddress=nota@realone.com/organizationName=IT/CN=$fqdn"
-    if ($LastExitCode) {
-        throw "openssl failed to create server certificate request"
-    }
+    $fqdn = $computername
+
+    $cmd = @(
+        "openssl", "req", "-newkey", "rsa:2048", "-nodes",
+        "-sha1", "-keyout", "$private_dir\cert.key", "-keyform",
+        "PEM", "-out", "$certs_dir\cert.req", "-outform", "PEM",
+        "-subj", "/C=US/ST=Washington/L=Seattle/emailAddress=nota@realone.com/organizationName=IT/CN=$fqdn")
+    Invoke-JujuCommand -Command $cmd
 
     $ENV:OPENSSL_CONF="$ca_dir\ca.cnf"
-    openssl ca -batch -notext -in $certs_dir\cert.req -out $certs_dir\cert.pem -extensions v3_req_server
-    if ($LastExitCode) {
-        throw "openssl CA failed to sign server certificate request"
-    }
+    $cmd = @(
+        "openssl", "ca", "-batch", "-notext", "-in",
+        "$certs_dir\cert.req", "-out", "$certs_dir\cert.pem",
+        "-extensions", "v3_req_server")
+    Invoke-JujuCommand -Command $cmd
 
     $ret = @{
         "ca"="$certs_dir\ca.pem";
@@ -891,13 +739,15 @@ function Import-Certificate {
         Throw "$cert_file or $key_file not found"
     }
 
-    $password = charm_config -scope 'password'
+    $password = Get-RandomString
     # Import server certificate
     $pfx = Join-Path $env:TEMP cert.pfx
 
-    Execute-ExternalCommand {
-        openssl.exe pkcs12 -export -in $cert_file -inkey $key_file -out $pfx -password pass:$password
-    }
+    $cmd = @(
+        "openssl.exe", "pkcs12", "-export", "-in",
+        "$cert_file", "-inkey", $key_file, "-out",
+        $pfx, "-password", "pass:$password")
+    Invoke-JujuCommand -Command $cmd
 
     $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(
         $pfx, $password,
@@ -945,8 +795,7 @@ function Set-Availability {
             Set-JujuRelation -Relation_Settings $relation_set `
                 -Relation_Id $r
             if ($ret -eq $false) {
-                Write-JujuError "Failed to set active-directory relation." `
-                    -Fatal $false
+                Write-JujuErr "Failed to set active-directory relation."
             }
         }
     }
@@ -955,23 +804,18 @@ function Set-Availability {
 }
 
 function Win-Peer {
-    Param()
-
     Write-JujuLog "Running peer relation..."
     $resumeInstall = (Get-CharmState "AD" "InstallingSlave") -eq "True"
     $fullDomainName = Get-JujuCharmConfig -Scope 'domain-name'
     if (!(Is-DomainInstalled $fullDomainName) -or $resumeInstall) {
         Write-JujuLog "This machine is not yet AD Controller."
         $ADParams = Get-RelationParams 'add-controller'
-        if (!$ADParams['context']) {
-            Write-JujuError -Fatal $false "Ad context not ready"
-        } else {
+        if ($ADParams) {
             if((Get-CharmState "ADController" "IsInstalled") -ne "True") {
                 Set-CharmState "AD" "InstallingSlave" "True"
                 Main-Slave $ADParams
             } else {
                 $dns = Get-PrimaryAdapterDNSServers
-                Write-JujuLog "$dns"
                 if ($dns -contains $ADParams['ip_address']) {
                     $dns = $dns | Where-Object {$_ -ne $ADParams['ip_address']}
                     if ($dns) {
@@ -988,8 +832,8 @@ function Win-Peer {
         $peerRelationsNotSet = $true
     }
     $isDomainInstalled = Is-DomainInstalled $fullDomainName
-    if (((Is-Leader) -or $peerRelationsNotSet) -and $isDomainInstalled) {
-        Write-JujuLog "Setting relations..."
+    if (((Confirm-Leader) -or $peerRelationsNotSet) -and $isDomainInstalled) {
+        Write-JujuInfo "Setting relations..."
         Set-Availability 'add-controller'
         Set-Availability 'ad-join'
         Set-CharmState "AD" "RunningLeaderElectedHook" "False"
@@ -1020,7 +864,7 @@ function Finish-Install {
 function Uninstall-ActiveDomainController {
     $hostname = $computername
     $fullDomainName = Get-JujuCharmConfig -Scope 'domain-name'
-    $user = Get-DefaultLocalAdministrator
+    $user = Get-AdministratorAccount
     $password = Get-JujuCharmConfig -Scope 'default-administrator-password'
     $uninstallPassword = Get-JujuCharmConfig -Scope 'uninstall-password'
     $domain = Get-DomainName $fullDomainName
@@ -1076,8 +920,6 @@ function Destroy-ADDomain {
         return
     }
     Close-DCPorts
-    Change-CBSServicesLogon "$hostname\LocalSystem" `
-        "$hostname\LocalSystem" $null $null
     Write-JujuLog "Syncing AD domain controllers before demotion..."
 
     try {
@@ -1109,7 +951,7 @@ function Install-Certificate {
         }
     }
 
-    $fqdn = Generate-FQDN
+    $fqdn = $computername
 
     $certs = (Get-ChildItem "Cert:\LocalMachine\My").Subject
     foreach ($i in $certs) {
@@ -1243,7 +1085,7 @@ function Create-DjoinData {
     )
     $blobName = ("djoin-" + $computername)
 
-    if(!(Is-Leader)){
+    if(!(Confirm-Leader)){
         Write-JujuLog "Not the leader. Exiting..."
         return $false
     }
@@ -1308,14 +1150,13 @@ function Encode-NanoCredentials {
 
 function Set-ADUserAvailability {
     $settings = @{}
-    $isLeader = Is-Leader
+    $isLeader = Confirm-Leader
     if (!$isLeader) {
         Write-JujuLog "I am not leader. Will not continue."
         return
     }
     $settings = @{}
     $adUsersEnc = Get-JujuRelation -Attr "adusers"
-    $nanoAdUsersEnc = Get-JujuRelation -Attr "nano-adusers"
     $computerGroupEnc = Get-JujuRelation -Attr "computerGroup"
 
     if ($computerGroupEnc) {
@@ -1340,17 +1181,10 @@ function Set-ADUserAvailability {
         }
     } 
 
-    if ($nanoAdUsersEnc){
-        $adUsers = Parse-ADUsersFromNano $nanoAdUsersEnc
+    if ($adUsersEnc) {
+        $adUsers = Get-UnmarshaledObject $adUsersEnc
         $creds = Create-ADUsersFromRelation $adUsers
-        if ($creds){
-            $encCreds = Encode-NanoCredentials $creds
-            $settings["nano-ad-credentials"] = $encCreds
-        }
-    } elseif ($adUsersEnc) {
-        $adUsers = Unmarshall-Object $adUsersEnc
-        $creds = Create-ADUsersFromRelation $adUsers
-        $encCreds = Marshall-Object $creds
+        $encCreds = Get-MarshaledObject $creds
         $settings["adcredentials"] = $encCreds
     }
     
@@ -1422,7 +1256,7 @@ function Run-UpgradeCharmHook {
 function Run-LeaderElectedHook {
     Write-JujuLog "Running leader elected hook..."
     try {
-        $isLeader = Is-Leader
+        $isLeader = Confirm-Leader
     } catch {
         Write-JujuError "Failed to get leader." -Fatal $false
         return $false
@@ -1464,7 +1298,7 @@ function Run-LeaderSettingsChangedHook {
 function Run-ADRelationChangedHook {
     Write-JujuLog "Running AD relation changed hook..."
 
-    $isLeader = Is-Leader
+    $isLeader = Confirm-Leader
     if (!$isLeader) {
         Write-JujuLog "I am not leader. Will not continue."
         return
@@ -1475,7 +1309,7 @@ function Run-ADRelationChangedHook {
 
 function Run-ADRelationJoinedHook {
     Write-JujuLog "Running AD relation joined hook..."
-    $isLeader = Is-Leader
+    $isLeader = Confirm-Leader
     if (!$isLeader) {
         Write-JujuLog "I am not leader. Will not continue."
         return
