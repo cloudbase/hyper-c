@@ -4,12 +4,12 @@
 $ErrorActionPreference = 'Stop'
 $computername = [System.Net.Dns]::GetHostName()
 
-# $charmHelpers = Join-Path $PSScriptRoot "Modules\CharmHelpers"
-# Import-Module -Force -DisableNameChecking $charmHelpers
+# Charm Helpers
 Import-Module JujuLoging
 Import-Module JujuHooks
 Import-Module JujuUtils
 Import-Module JujuWindowsUtils
+
 Import-Module ADCharmUtils
 
 $WINDOWS_FEATURES = @( 'AD-Domain-Services',
@@ -24,7 +24,7 @@ $WINDOWS_FEATURES = @( 'AD-Domain-Services',
 $ADUserSection = "ADCharmUsers"
 
 
-function Run-TimeResync {
+function Start-TimeResync {
     Write-JujuInfo "Synchronizing time..."
     $ts = @("tzutil.exe", "/s", "UTC")
     Invoke-JujuCommand -Command $ts
@@ -339,7 +339,7 @@ function Create-ServicesUsers {
             $dcName $userName
         $u = "$domain\$userName"
         $cmd = @("net.exe", "localgroup", $administratorsGroupName, $u, "/add")
-        Invoke-JujuCommand -Command $cmd
+        Invoke-JujuCom`mand -Command $cmd
         Set-UserRunAsRights "$domain\$userName"
     }
 }
@@ -1173,27 +1173,27 @@ function Run-ADRelationDepartedHook {
     return $true
 }
 
-function Run-InstallHook {
+function Start-InstallHook {
     Write-JujuLog "Running install hook..."
     Prepare-ADInstall
     Run-LeaderElectedHook
     Write-JujuLog "Finished running install hook."
 }
 
-function Run-StopHook {
+function Start-StopHook {
     Write-JujuLog "Running stop hook..."
     Destroy-ADDomain
     Close-DCPorts
     Write-JujuLog "Finished running stop hook."
 }
 
-function Run-UpgradeCharmHook {
+function Start-UpgradeCharmHook {
     Write-JujuLog "Running upgrade-charm hook..."
     Win-Peer
     Write-JujuLog "Finished running upgrade-charm hook."
 }
 
-function Run-LeaderElectedHook {
+function Start-LeaderElectedHook {
     Write-JujuLog "Running leader elected hook..."
     $isLeader = Confirm-Leader
 
@@ -1223,7 +1223,7 @@ function Run-LeaderElectedHook {
     Write-JujuLog "Finished running leader elected hook."
 }
 
-function Run-ADRelationChangedHook {
+function Start-ADRelationChangedHook {
     Write-JujuLog "Running AD relation changed hook..."
 
     $isLeader = Confirm-Leader
@@ -1235,7 +1235,7 @@ function Run-ADRelationChangedHook {
     Write-JujuLog "Finished running AD relation changed hook."
 }
 
-function Run-ADRelationJoinedHook {
+function Start-ADRelationJoinedHook {
     Write-JujuLog "Running AD relation joined hook..."
     $isLeader = Confirm-Leader
     if (!$isLeader) {
@@ -1246,13 +1246,13 @@ function Run-ADRelationJoinedHook {
     Write-JujuLog "Finished running AD relation joined hook."
 }
 
-function Run-AddControllerRelationJoinedHook {
+function Start-AddControllerRelationJoinedHook {
     Write-JujuLog "Running add-controller relation joined hook..."
     Win-Peer
     Write-JujuLog "Finished running add-controller relation joined hook."
 }
 
-function Run-AddControllerRelationChangedHook {
+function Start-AddControllerRelationChangedHook {
     Write-JujuLog "Running add-controller relation changed hook..."
     Win-Peer
     Write-JujuLog "Finished running add-controller relation changed hook."
@@ -1287,18 +1287,12 @@ function Run-SetKCD {
     return $true
 }
 
-Export-ModuleMember -Function Run-ADRelationJoinedHook
-Export-ModuleMember -Function Run-ADRelationChangedHook
-
-Export-ModuleMember -Function Run-AddControllerRelationJoinedHook
-Export-ModuleMember -Function Run-AddControllerRelationChangedHook
-
-Export-ModuleMember -Function Run-InstallHook
-Export-ModuleMember -Function Run-StopHook
-Export-ModuleMember -Function Run-UpgradeCharmHook
-
-Export-ModuleMember -Function Run-LeaderElectedHook
-
-Export-ModuleMember -Function Run-ADRelationDepartedHook
-Export-ModuleMember -Function Run-TimeResync
-Export-ModuleMember -Function Run-SetKCD
+New-Alias -Name Run-TimeResync -Value Start-TimeResync
+New-Alias -Name Run-InstallHook -Value Start-InstallHook
+New-Alias -Name Run-StopHook -Value Start-StopHook
+New-Alias -Name Run-UpgradeCharmHook -Value Start-UpgradeCharmHook
+New-Alias -Name Run-LeaderElectedHook -Value Start-LeaderElectedHook
+New-Alias -Name Run-ADRelationChangedHook -Value Start-ADRelationChangedHook
+New-Alias -Name Run-AddControllerRelationJoinedHook -Value Start-AddControllerRelationJoinedHook
+New-Alias -Name Run-AddControllerRelationChangedHook -Value Start-AddControllerRelationChangedHook
+New-Alias -Name Run-ADRelationJoinedHook -Value Start-ADRelationJoinedHook

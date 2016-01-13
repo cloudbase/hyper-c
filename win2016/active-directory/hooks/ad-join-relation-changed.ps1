@@ -2,12 +2,11 @@
 # Copyright 2014-2015 Cloudbase Solutions Srl
 #
 $ErrorActionPreference = 'Stop'
+Import-Module JujuLoging
 
 try {
-    $modulePath = "$PSScriptRoot\active-directory-common.psm1"
-    Import-Module -Force -DisableNameChecking $modulePath
-
-    Run-ADRelationChangedHook
+    Import-Module ADHooks
+    Start-ADRelationChangedHook
 } catch {
     Write-HookTracebackToLog $_
     exit 1
