@@ -863,28 +863,28 @@ function Finish-Install {
 
 function Uninstall-ActiveDomainController {
     $hostname = $computername
-    $fullDomainName = Get-JujuCharmConfig -Scope 'domain-name'
+    $domainInfo = Get-ADDomain
+
     $user = Get-AdministratorAccount
     $password = Get-JujuCharmConfig -Scope 'default-administrator-password'
     $uninstallPassword = Get-JujuCharmConfig -Scope 'uninstall-password'
-    $domain = Get-DomainName $fullDomainName
+    $netbiosName = $domainInfo.NetBIOSName
     $passwordSecure = ConvertTo-SecureString $password -AsPlainText -Force
-    $uninstallPasswordSecure = `
-        ConvertTo-SecureString $password -AsPlainText -Force
-    $adCredential = New-Object -TypeName PSCredential -ArgumentList `
-                       @("$domain\$user", $passwordSecure)
-    Execute-ExternalCommand {
-        repadmin.exe /syncall
-    }
-    $domainControllers = (Get-ADDomainController `
-        -Filter {Enabled -eq $true}).Name
+    $uninstallPasswordSecure = ConvertTo-SecureString $password -AsPlainText -Force
+    $adCredential = New-Object -TypeName PSCredential -ArgumentList @("$netbiosName\$user", $passwordSecure)
+
+    $cmd = @("repadmin.exe", "/syncall")
+    Invoke-JujuCommand -Command $cmd
+
+    $domainControllers = (Get-ADDomainController -Filter {Enabled -eq $true}).Name
     if (!($domainControllers -contains $hostname)) {
         Write-JujuLog "This unit is not a domain Controller."
         return
     }
+
     if ($domainControllers.Count -eq 1) {
-        Write-JujuLog "Trying to remove the last domain controller."
-        ExecuteWith-Retry -Command {
+        Write-JujuInfo "Trying to remove the last domain controller."
+        Start-ExecuteWithRetry -Command {
             param($adCredential, $passwordSecure)
             Uninstall-ADDSDomainController -Credential $adCredential `
                 -LocalAdministratorPassword:$uninstallPasswordSecure `
@@ -909,11 +909,7 @@ function Uninstall-ActiveDomainController {
 }
 
 function Destroy-ADDomain {
-    Param()
-
     Write-JujuLog "Started destroying AD Domain..."
-    $hostname = $computername
-
     $fullDomainName = Get-JujuCharmConfig -Scope 'domain-name'
     if (!(Is-DomainInstalled $fullDomainName)) {
         Write-JujuLog "The machine is not part of the domain."
@@ -922,19 +918,14 @@ function Destroy-ADDomain {
     Close-DCPorts
     Write-JujuLog "Syncing AD domain controllers before demotion..."
 
-    try {
-        ExecuteWith-Retry -Command {
-            Uninstall-ActiveDomainController
-        } -MaxRetryCount 3 -RetryInterval 30
-        ExitFrom-JujuHook -WithReboot
-        Set-CharmState "ADController" "IsInstalled" "False"
-    } catch {
-        Write-JujuError "Failed to uninstall AD controller" -Fatal $false
-    }
+    Start-ExecuteWithRetry -Command {
+        Uninstall-ActiveDomainController
+    } -MaxRetryCount 3 -RetryInterval 30
+    Set-CharmState "ADController" "IsInstalled" "False"
+    Invoke-JujuReboot -Now
 }
 
 function Install-Certificate {
-    Param()
     Write-JujuLog "Installing certificate..."
 
     if ((Get-CharmState "AD" "CertificateInstalled") -eq "True") {
@@ -1019,29 +1010,6 @@ function Close-DCPorts {
     }
 }
 
-function Update-DC {
-    Win-Peer
-}
-
-function Parse-ADUsersFromNano {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [string]$credentials
-    )
-
-    $ret = New-Object PSObject
-    $c = $credentials.Split("|")
-    foreach ($i in $c){
-        $elem = $i.Split("=", 2)
-        $user = $elem[0]
-        $groupsDec = ConvertFrom-Base64 $elem[1]
-        $groupArr = $groupsDec.Split("|")
-        $ret | Add-Member $user $groupArr
-    }
-    return $ret
-}
-
-
 function GetBlob-FromLeader {
     Param(
         [Parameter(Mandatory=$true)]
@@ -1107,7 +1075,7 @@ function Create-DjoinData {
     $blobFile = Join-Path $storage ($computername + ".txt")
 
     if((Test-Path $blobFile)){
-        $c = ConvertFile-ToBase64 $blobFile
+        $c = Convert-FileToBase64 $blobFile
         $blob = GetBlob-FromLeader -Name $blobName
         if($blob -and $blob -ne $c){
             # Stale local blob file
@@ -1119,37 +1087,19 @@ function Create-DjoinData {
     }
 
     $domain = Get-JujuCharmConfig -Scope 'domain-name'
-    djoin.exe /provision /domain $domain /machine $computername /savefile $blobFile 2>&1 | out-null
-    if($LastExitCode){
-        if((Test-Path $blobFile)){
-            $ret = rm -Force $blobFile
-        }
-        Throw "Error provisioning machine: $LastExitCode"
+    $cmd = @("djoin.exe", "/provision", "/domain", $domain, "/machine", $computername, "/savefile", $blobFile)
+    try {
+        Invoke-JujuCommand -Command $cmd
+    } finally {
+        rm -Force $blobFile | out-null
     }
-    $blob = ConvertFile-ToBase64 $blobFile
-    $ret = SetBlob-ToLeader -Name $blobName -Blob $blob
-    $ret = rm -Force $blobFile
+    $blob = Convert-FileToBase64 $blobFile
+    SetBlob-ToLeader -Name $blobName -Blob $blob | Out-Null
+    rm -Force $blobFile | Out-Null
     return $blob
 }
 
-function Encode-NanoCredentials {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [hashtable]$creds
-    )
-    $ret = ""
-    foreach($i in $creds.GetEnumerator()){
-        if($ret.Length -eq 0){
-            $ret += ($i.Name + "=" + $i.Value)
-        }else{
-            $ret += ("|" + $i.Name + "=" + $i.Value)
-        }
-    }
-    return (ConvertTo-Base64 $ret)
-}
-
 function Set-ADUserAvailability {
-    $settings = @{}
     $isLeader = Confirm-Leader
     if (!$isLeader) {
         Write-JujuLog "I am not leader. Will not continue."
@@ -1230,16 +1180,6 @@ function Run-InstallHook {
     Write-JujuLog "Finished running install hook."
 }
 
-function Run-ConfigChangedHook {
-    Write-JujuLog "Running config-changed hook..."
-    Write-JujuLog "Finished running config-changed hook."
-}
-
-function Run-StartHook {
-    Write-JujuLog "Running start hook..."
-    Write-JujuLog "Finished running start hook."
-}
-
 function Run-StopHook {
     Write-JujuLog "Running stop hook..."
     Destroy-ADDomain
@@ -1249,18 +1189,13 @@ function Run-StopHook {
 
 function Run-UpgradeCharmHook {
     Write-JujuLog "Running upgrade-charm hook..."
-    Update-DC
+    Win-Peer
     Write-JujuLog "Finished running upgrade-charm hook."
 }
 
 function Run-LeaderElectedHook {
     Write-JujuLog "Running leader elected hook..."
-    try {
-        $isLeader = Confirm-Leader
-    } catch {
-        Write-JujuError "Failed to get leader." -Fatal $false
-        return $false
-    }
+    $isLeader = Confirm-Leader
 
     $isFormerLeader = $false
     $leaderHostname = Get-LeaderData -Attr "active-leader"
@@ -1274,13 +1209,11 @@ function Run-LeaderElectedHook {
         Set-LeaderData @{"active-leader"=($computername);}
     }
     if (($isLeader -and $isFormerLeader) -or $alreadyRunningLeaderElected) {
-        Write-JujuLog "This unit should resume running the hook."
+        Write-JujuLog "Resuming hook run."
         Set-CharmState "AD" "RunningLeaderElectedHook" "True"
-        ExecuteWith-Retry {
+        Start-ExecuteWithRetry {
             Install-ADForest
         } -MaxRetryCount 30 -RetryInterval 30
-    } else {
-        Write-JujuLog "This unit should not resume running the hook. Skipping..."
     }
     if ($isLeader) {
         Set-Availability 'ad-join'
@@ -1288,11 +1221,6 @@ function Run-LeaderElectedHook {
     }
     Finish-Install
     Write-JujuLog "Finished running leader elected hook."
-}
-
-function Run-LeaderSettingsChangedHook {
-    Write-JujuLog "Running leader settings changed hook..."
-    Write-JujuLog "Finished running leader settings changed hook."
 }
 
 function Run-ADRelationChangedHook {
@@ -1366,13 +1294,10 @@ Export-ModuleMember -Function Run-AddControllerRelationJoinedHook
 Export-ModuleMember -Function Run-AddControllerRelationChangedHook
 
 Export-ModuleMember -Function Run-InstallHook
-Export-ModuleMember -Function Run-ConfigChangedHook
-Export-ModuleMember -Function Run-StartHook
 Export-ModuleMember -Function Run-StopHook
 Export-ModuleMember -Function Run-UpgradeCharmHook
 
 Export-ModuleMember -Function Run-LeaderElectedHook
-Export-ModuleMember -Function Run-LeaderSettingsChangedHook
 
 Export-ModuleMember -Function Run-ADRelationDepartedHook
 Export-ModuleMember -Function Run-TimeResync
