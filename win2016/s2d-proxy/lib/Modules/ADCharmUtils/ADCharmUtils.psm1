@@ -119,8 +119,6 @@ function Get-ActiveDirectoryContext {
     }
     $ctx = Get-JujuRelationContext -Relation "ad-join" -RequiredContext $requiredCtx -OptionalContext $optionalContext
 
-    Write-JujuInfo ("Keys: " + $ctx.Keys)
-    Write-JujuInfo ("Values: " + $ctx.Values)
     # Required context not found
     if(!$ctx.Count) {
         return @{}
