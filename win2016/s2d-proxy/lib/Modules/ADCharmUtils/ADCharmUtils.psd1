@@ -1,5 +1,5 @@
 #
-# Copyright 2014-2015 Cloudbase Solutions Srl
+# Copyright 2016 Cloudbase Solutions Srl
 #
 # Module manifest for module 'ADCharmUtils'
 #
@@ -34,7 +34,7 @@ Description = 'Utilities for active directory charm'
 # Minimum version of the Windows PowerShell engine required by this module
 PowerShellVersion = '3.0'
 
-FunctionsToExport = 'Start-JoinDomain'
+FunctionsToExport = '*'
 
 RequiredModules = @("JujuWindowsUtils", "JujuLoging", "JujuHooks", "JujuUtils")
 

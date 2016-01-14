@@ -80,7 +80,7 @@ RequiredModules = @("JujuLoging")
 # NestedModules = @("JujuUtils.psm1")
 
 # Functions to export from this module
-FunctionsToExport = "Convert-FileToBase64","Write-FileFromBase64","ConvertTo-Base64","ConvertFrom-Base64","Get-EncryptedString","Get-DecryptedString","Get-UserPath","Get-SystemPath","Compare-ScriptBlocks","Compare-Arrays","Compare-HashTables","Start-ExternalCommand","Start-ExecuteWithRetry","Test-FileIntegrity","Get-SanePath","Add-ToUserPath","Get-MarshaledObject","Get-UnmarshaledObject","Get-CmdStringFromHashtable","Get-EscapedQuotedString","Get-PSStringParamsFromHashtable","Get-RandomString"
+FunctionsToExport = "Convert-FileToBase64","Write-FileFromBase64","ConvertTo-Base64","ConvertFrom-Base64","Get-EncryptedString","Get-DecryptedString","Get-UserPath","Get-SystemPath","Compare-ScriptBlocks","Compare-Arrays","Compare-HashTables","Start-ExternalCommand","Start-ExecuteWithRetry","Test-FileIntegrity","Get-SanePath","Add-ToUserPath","Get-MarshaledObject","Get-UnmarshaledObject","Get-CmdStringFromHashtable","Get-EscapedQuotedString","Get-PSStringParamsFromHashtable"
 
 # Cmdlets to export from this module
 CmdletsToExport = '*'

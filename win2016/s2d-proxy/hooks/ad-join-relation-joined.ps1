@@ -1,11 +1,11 @@
 #
-# Copyright 2014 Cloudbase Solutions SRL
+# Copyright 2016 Cloudbase Solutions Srl
 #
 
 # we want to exit on error
 $ErrorActionPreference = "Stop"
 $computername = [System.Net.Dns]::GetHostName()
-Import-Module JujuLoger
+Import-Module JujuLoging
 
 try {
     Import-Module ADCharmUtils

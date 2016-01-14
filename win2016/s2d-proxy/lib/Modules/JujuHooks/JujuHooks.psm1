@@ -234,10 +234,17 @@ function Set-JujuRelation {
                 Throw "Could not determine relation ID"
             }
         }
-        foreach ($i in $Settings.GetEnumerator()) {
-           $cmd += $i.Name + "='" + $i.Value + "'"
+        $settingsFile = Join-Path $env:tmp ((Get-RandomString -Weak -Length 32) + ".yaml")
+        if($Settings.Count){
+            $yml = ConvertTo-Yaml $Settings
+            [System.IO.File]::WriteAllLines($settingsFile, $yml)
         }
-        Invoke-JujuCommand $cmd | Out-Null
+        $cmd += @("--file", $settingsFile)
+        try{
+            Invoke-JujuCommand $cmd | Out-Null
+        }finally {
+            rm -Force $settingsFile
+        }
         return $true
     }
 }
@@ -437,7 +444,7 @@ function Get-JujuUnit {
         [string]$Attribute
     )
     PROCESS {
-        $cmd = @("unit-get.exe", "--format=Yaml", $Attribute)
+        $cmd = @("unit-get.exe", "--format=yaml", $Attribute)
         return (Invoke-JujuCommand $cmd | ConvertFrom-Yaml)
     }
 }
@@ -711,7 +718,7 @@ function Confirm-JujuPortRangeOpen {
 
     )
     PROCESS {
-        $cmd = @("opened-ports.exe", "--format=Yaml")
+        $cmd = @("opened-ports.exe", "--format=yaml")
         $openedPorts = Invoke-JujuCommand $cmd | ConvertFrom-Yaml
 
         if (!$openedPorts) {
@@ -804,7 +811,7 @@ function Confirm-Leader {
     Check if current unit is leader.
     #>
     PROCESS {
-        $cmd = @("is-leader.exe", "--format=Yaml")
+        $cmd = @("is-leader.exe", "--format=yaml")
         return (Invoke-JujuCommand -Cmd $cmd | ConvertFrom-Yaml)
     }
 }

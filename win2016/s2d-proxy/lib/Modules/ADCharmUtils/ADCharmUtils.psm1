@@ -1,5 +1,5 @@
 #
-# Copyright 2014 Cloudbase Solutions SRL
+# Copyright 2016 Cloudbase Solutions Srl
 #
 
 $computername = [System.Net.Dns]::GetHostName()
@@ -47,14 +47,15 @@ function Get-CimCredentials {
         return $false
     }
     Write-JujuInfo "Granting privileges on s2duser"
-    Grant-PrivilegesOnDomainUser -Username "s2duser" -Domain $ctx["netbiosname"]
+    Grant-PrivilegesOnDomainUser -Username "s2duser" -Domain $ctx["netbiosname"] | Out-Null
 
     $clearPass = $ctx["my_ad_password"]
     Write-JujuInfo "Converting string to SecureString"
     $passwd = ConvertTo-SecureString -AsPlainText -Force $clearPass
     $usr = ($ctx["netbiosname"] + "\s2duser")
-    $c = New-Object System.Management.Automation.PSCredential($usr, $passwd)
+    $c = [System.Management.Automation.PSCredential](New-Object System.Management.Automation.PSCredential($usr, $passwd))
     Set-Variable -Scope Global -Name cimCreds -Value $c
+    Write-JujuInfo ("Returning: " + $c.GetType().FullName)
     return $c
 }
 
@@ -93,7 +94,7 @@ function Get-AdUserAndGroup {
 
 function Get-MyADCredentials {
     Param (
-        [string]$creds
+        [System.Object]$creds
     )
     if (!$creds){
         return $null
@@ -119,12 +120,12 @@ function Get-ActiveDirectoryContext {
         Write-JujuInfo "Found related units: $related_units"
         if($related_units){
             foreach($unit in $related_units){
-                $already_joined = relation_get -attr "already-joined" -rid $rid -unit $unit
-                $ctx["ip_address"] = relation_get -attr "address" -rid $rid -unit $unit
-                $ctx["ad_domain"] = relation_get -attr "domainName" -rid $rid -unit $unit
-                $ctx["netbiosname"] = relation_get -attr "netbiosname" -rid $rid -unit $unit
-                $ctx["djoin_blob"] = relation_get -attr $blobKey -rid $rid -unit $unit
-                $creds = relation_get -attr "adcredentials" -rid $rid -unit $unit
+                $already_joined = Get-JujuRelation -Attribute "already-joined" -RelationID $rid -unit $unit
+                $ctx["ip_address"] = Get-JujuRelation -Attribute "address" -RelationID $rid -unit $unit
+                $ctx["ad_domain"] = Get-JujuRelation -Attribute "domainName" -RelationID $rid -unit $unit
+                $ctx["netbiosname"] = Get-JujuRelation -Attribute "netbiosname" -RelationID $rid -unit $unit
+                $ctx["djoin_blob"] = Get-JujuRelation -Attribute $blobKey -RelationID $rid -unit $unit
+                $creds = Get-JujuRelation -Attribute "adcredentials" -RelationID $rid -unit $unit
                 $ctx["my_ad_password"] = Get-MyADCredentials $creds
                 if($already_joined){
                     $ctx.Remove("djoin_blob")

@@ -1032,10 +1032,7 @@ function SetBlob-ToLeader {
         [string]$Blob
     )
 
-    $ret = Set-LeaderData @{$Name=$Blob;}
-    if (!$ret){
-        Throw "Failed to set djoin blob for $node"
-    }
+    Set-LeaderData @{$Name=$Blob;}
 }
 
 function RemoveBlob-FromLeader {
@@ -1043,10 +1040,7 @@ function RemoveBlob-FromLeader {
         [Parameter(Mandatory=$true)]
         [string]$Name
     )
-    $ret = Set-LeaderData @{$Name="Nil";}
-    if (!$ret){
-        Throw "Failed to set djoin blob for $node"
-    }
+    Set-LeaderData @{$Name="Nil";}
 }
 
 function Create-DjoinData {
@@ -1093,12 +1087,11 @@ function Create-DjoinData {
     $cmd = @("djoin.exe", "/provision", "/domain", $domain, "/machine", $computername, "/savefile", $blobFile)
     try {
         Invoke-JujuCommand -Command $cmd
+        $blob = Convert-FileToBase64 $blobFile
+        SetBlob-ToLeader -Name $blobName -Blob $blob | Out-Null
     } finally {
         rm -Force $blobFile | out-null
     }
-    $blob = Convert-FileToBase64 $blobFile
-    SetBlob-ToLeader -Name $blobName -Blob $blob | Out-Null
-    rm -Force $blobFile | Out-Null
     return $blob
 }
 

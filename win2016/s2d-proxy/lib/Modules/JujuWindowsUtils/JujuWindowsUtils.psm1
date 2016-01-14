@@ -20,8 +20,7 @@ if ($version -lt 4){
     New-Alias -Name Get-ManagementObject -Value Get-CimInstance
 }
 
-$here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$moduleHome = Split-Path -Parent $here
+$moduleHome = Split-Path -Parent $MyInvocation.MyCommand.Path
 $administratorsGroupSID = "S-1-5-32-544"
 $computername = [System.Net.Dns]::GetHostName()
 
@@ -63,6 +62,7 @@ function Grant-Privilege {
         $privBin = (get-command SetUserAccountRights.exe -ErrorAction SilentlyContinue).source
         if(!$privBin) {
             $privBin = Join-Path (Join-Path $moduleHome "Bin") "SetUserAccountRights.exe"
+            Write-JujuWarning "Failed to find SetUserAccountRights.exe in PATH. Trying with: $privBin"
         }
         if(!(Test-Path $privBin)) {
             Throw "Cound not find SetUserAccountRights.exe on the system."
@@ -70,10 +70,8 @@ function Grant-Privilege {
     }
     PROCESS {
         Write-JujuInfo "Running: $privBin -g $User -v $Grant"
-        & $privBin -g $User -v $Grant
-        if ($LASTEXITCODE){
-            Throw "SetUserAccountRights.exe: exited with status $LASTEXITCODE"
-        }
+        $cmd = @($privBin, "-g", "$User", "-v", $Grant)
+        Invoke-JujuCommand -Command $cmd | Out-Null
     }
 }
 
@@ -390,7 +388,7 @@ function Get-GroupObjectByName {
     PROCESS {
         $g = Get-ManagementObject -Class "Win32_Group" `
                                   -Filter ("Name='{0}'" -f $GroupName)
-        if (!$existentUser) {
+        if (!$g) {
             Throw "Group not found: $GroupName"
         }
         return $g
@@ -531,10 +529,31 @@ function Get-AdministratorsGroup {
     }
 }
 
+function Get-LocalUserGroupMembership {
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Group,
+        [Parameter(Mandatory=$true)]
+        [string]$Username
+    )
+    PROCESS {
+        $cmd = @("net.exe", "localgroup", $Group)
+        $ret = Invoke-JujuCommand -Command $cmd
+        $members =  $ret | where {$_ -AND $_ -notmatch "command completed successfully"} | select -skip 4
+        foreach ($i in $members){
+            if ($Username -eq $i){
+                return $true
+            }
+        }
+        return $false
+    }
+}
+
 function Get-UserGroupMembership {
     <#
     .SYNOPSIS
-    Checks whether or not a user is part of a particular local group.
+    Checks whether or not a user is part of a particular group. If running under a local user, domain users will not be visible.
     .PARAMETER Username
     The username to verify
     .PARAMETER GroupSID
@@ -642,7 +661,7 @@ function Add-UserToLocalGroup {
         if($GroupName) {
             $GroupSID = (Get-GroupObjectByName $GroupName).SID
         }
-        $isInGroup = Get-UserGroupMembership -User $Username -GroupSID $GroupSID
+        $isInGroup = Get-LocalUserGroupMembership -User $Username -Group $GroupName
         if($isInGroup){
             return
         }

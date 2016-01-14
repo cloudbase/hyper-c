@@ -13,8 +13,8 @@ try {
     $adUser = Get-AdUserAndGroup
 
     $relation_set = @{
-        'nano-adusers'=$adUser;
-        'computername'=$computername;
+        'adusers' = $adUser;
+        'computername' = $computername;
     }
 
     $rids = relation_ids -reltype "ad-join"

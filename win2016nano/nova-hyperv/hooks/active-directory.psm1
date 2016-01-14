@@ -13,11 +13,13 @@ $nova_compute = "nova-compute"
 Import-Module -Force -DisableNameChecking CharmHelpers
 
 function Get-AdUserAndGroup {
-    # pipe separated list of groups
-    $groups = "CN=Domain Admins,CN=Users"
-    $encoded = ConvertTo-Base64 $groups
-    $creds = "nova-hyperv=$encoded"
-    return $creds
+    $creds = @{
+        "nova-hyperv"=@(
+            "CN=Domain Admins,CN=Users"
+        )
+    }
+    $ret = Get-MarshaledObject $creds
+    return $ret
 }
 
 function Is-InDomain {
@@ -34,25 +36,14 @@ function Is-InDomain {
 
 function Extract-NovaADCredentials {
     Param (
-        $creds
+        [System.Object]$creds
     )
     if (!$creds){
-        return $false
+        return $null
     }
-    $decoded = ConvertFrom-Base64 $creds
-    $users = $decoded.Split("|")
-    if(!$users){
-        return $false
-    }
-    foreach ($i in $users){
-        $elem = $i.Split("=", 2)
-        if($elem.Length -ne 2){
-            continue
-        }
-        $passwd = $elem[1]
-        return $passwd
-    }
-    return $false
+    $obj = Get-UnmarshaledObject $creds
+    $passwd = $obj["nova-hyperv"]
+    return $passwd
 }
 
 function Get-RelationParams($type){

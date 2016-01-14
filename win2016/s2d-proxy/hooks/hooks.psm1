@@ -1,14 +1,16 @@
 #
-# Copyright 2014 Cloudbase Solutions SRL
+# Copyright 2016 Cloudbase Solutions Srl
 #
 
 $env:PSModulePath += ";$env:CHARM_DIR\lib\Modules"
 $ErrorActionPreference = "Stop"
 
-Import-Module -Force -DisableNameChecking CharmHelpers
-
-$activeDirectoryModule = Join-Path $psscriptroot active-directory.psm1
-Import-Module -Force -DisableNameChecking $activeDirectoryModule
+Import-Module ADCharmUtils
+Import-Module JujuLoging
+Import-Module JujuWindowsUtils
+Import-Module JujuUtils
+Import-Module JujuHooks
+Import-Module S2DUtils
 
 $global:cimCreds = $null
 
@@ -330,7 +332,7 @@ function Broadcast-VolumeCreated {
     }
 }
 
-function Run-S2DRelationChanged {
+function Start-S2DRelationChanged {
     $isInDomain = (gcim Win32_ComputerSystem).PartOfDomain
     if (!$isInDomain){
         Write-JujuWarning "Not yet in any domain. Skipping"
@@ -353,38 +355,38 @@ function Run-S2DRelationChanged {
     $nodes = Get-S2DNodes
 
     #juju-log.exe "Running Run-SetKCD"
-    #Run-SetKCD
     Write-JujuInfo "Found nodes: $nodes"
     if ($nodes.Count -ne $minimumUnits){
         Write-JujuInfo ("Minimum required nodes not achieved($minimumUnits). Got: " + $nodes.Count)
         return $false
     }
+    Run-SetKCD
     Write-JujuInfo "Creating new CIM session"
     $session = Get-NewCimSession -Nodes $nodes
     Write-JujuInfo "Got new CIM session $session"
     try {
         Write-JujuInfo "Running Create-S2DCluster"
-        ExecuteWith-Retry {
+        Start-ExecuteWithRetry {
             Create-S2DCluster -Nodes $nodes -Domain $fqdn -ClusterName $clusterName
         } -RetryInterval 10 -MaxRetryCount 10
         Write-JujuInfo "Running Add-NodesToCluster"
-        ExecuteWith-Retry {
+        Start-ExecuteWithRetry {
             Add-NodesToCluster -nodes $nodes -Domain $fqdn -ClusterName $clusterName
         } -RetryInterval 10 -MaxRetryCount 10
         Write-JujuInfo "Running Enable-S2D"
-        ExecuteWith-Retry {
+        Start-ExecuteWithRetry {
             Enable-S2D -Domain $fqdn -ClusterName $clusterName
         } -RetryInterval 10 -MaxRetryCount 10
         Write-JujuInfo "Running Create-StoragePool"
-        ExecuteWith-Retry {
+        Start-ExecuteWithRetry {
             Create-StoragePool -Domain $fqdn -ClusterName $clusterName -Session $session -StoragePool $storagePool
         } -RetryInterval 10 -MaxRetryCount 10
         Write-JujuInfo "Running Create-S2DVolume"
-        ExecuteWith-Retry {
+        Start-ExecuteWithRetry {
             Create-S2DVolume -Session $session -VolumeName $volumeName -StoragePool $storagePool -ClusterName $clusterName
         } -RetryInterval 10 -MaxRetryCount 10
         Write-JujuInfo "Running Enable-ScaleOutFileServer"
-        ExecuteWith-Retry {
+        Start-ExecuteWithRetry {
             Enable-ScaleOutFileServer -Name $scaleoutname -Session $session -Domain $fqdn -ClusterName $clusterName
         } -RetryInterval 10 -MaxRetryCount 10
         Broadcast-VolumeCreated -VolumeName $volumeName -Session $session
@@ -425,4 +427,4 @@ function Run-SetKCD {
     return $true
 }
 
-Export-ModuleMember -Function *
+Export-ModuleMember -Function Start-S2DRelationChanged

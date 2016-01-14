@@ -1,5 +1,9 @@
+#
+# Copyright 2016 Cloudbase Solutions Srl
+#
+
 $ErrorActionPreference = "Stop"
-Import-Module JujuLoger
+Import-Module JujuLoging
 
 try {
     Import-Module ADCharmUtils
