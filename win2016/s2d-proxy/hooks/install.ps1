@@ -2,6 +2,7 @@
 # Copyright 2014-2015 Cloudbase Solutions Srl
 #
 $ErrorActionPreference = 'Stop'
+Import-Module JujuLoger
 
 try {
     $ret = Install-WindowsFeature -Name File-Services, Failover-Clustering -IncludeManagementTools

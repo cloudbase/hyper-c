@@ -437,7 +437,7 @@ function Get-JujuUnit {
         [string]$Attribute
     )
     PROCESS {
-        $cmd = @("unit-get.exe", "--format=yaml", $Attribute)
+        $cmd = @("unit-get.exe", "--format=Yaml", $Attribute)
         return (Invoke-JujuCommand $cmd | ConvertFrom-Yaml)
     }
 }
@@ -711,7 +711,7 @@ function Confirm-JujuPortRangeOpen {
 
     )
     PROCESS {
-        $cmd = @("opened-ports.exe", "--format=yaml")
+        $cmd = @("opened-ports.exe", "--format=Yaml")
         $openedPorts = Invoke-JujuCommand $cmd | ConvertFrom-Yaml
 
         if (!$openedPorts) {
@@ -804,7 +804,7 @@ function Confirm-Leader {
     Check if current unit is leader.
     #>
     PROCESS {
-        $cmd = @("is-leader.exe", "--format=yaml")
+        $cmd = @("is-leader.exe", "--format=Yaml")
         return (Invoke-JujuCommand -Cmd $cmd | ConvertFrom-Yaml)
     }
 }

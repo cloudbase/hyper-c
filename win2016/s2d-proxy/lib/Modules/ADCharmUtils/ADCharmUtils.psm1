@@ -4,30 +4,50 @@
 
 $computername = [System.Net.Dns]::GetHostName()
 
-if ($env:PSModulePath -eq "") {
-    $env:PSModulePath = "${env:ProgramFiles}\WindowsPowerShell\Modules;${env:SystemDrive}\windows\system32\windowspowershell\v1.0\Modules;$env:CHARM_DIR\lib\Modules"
-    import-module Microsoft.PowerShell.Management
-    import-module Microsoft.PowerShell.Utility
-}else{
-    $env:PSModulePath += ";$env:CHARM_DIR\lib\Modules"
-}
-
 $ErrorActionPreference = 'Stop'
 $nova_compute = "nova-compute"
 
-Import-Module -Force -DisableNameChecking CharmHelpers
+$global:cimCreds = $null
+
+function Confirm-IsInDomain {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$WantedDomain
+    )
+
+    $currentDomain = (Get-ManagementObject -Class Win32_ComputerSystem).Domain.ToLower()
+    $comparedDomain = ($WantedDomain).ToLower()
+    $inDomain = $currentDomain.Equals($comparedDomain)
+
+    return $inDomain
+}
+
+function Grant-PrivilegesOnDomainUser {
+    Param (
+        [Parameter(Mandatory=$true)]
+        [string]$Username,
+        [Parameter(Mandatory=$true)]
+        [string]$Domain
+    )
+
+    $domUser = "$domain\$Username"
+    Grant-Privilege $domUser SeServiceLogonRight
+
+    $administratorsGroupSID = "S-1-5-32-544"
+    Add-UserToLocalGroup -Username $domUser -GroupSID $administratorsGroupSID
+}
 
 function Get-CimCredentials {
-    if($cimCreds){
-        return $cimCreds
+    if($global:cimCreds){
+        return $global:cimCreds
     }
     Write-JujuInfo "Fetching active directory context"
     $ctx = Get-ActiveDirectoryContext
-    if(!$ctx.Count) {
+    if(!$ctx) {
         return $false
     }
     Write-JujuInfo "Granting privileges on s2duser"
-    GrantPrivileges-OnDomainUser -Username "s2duser" -Domain $ctx["netbiosname"]
+    Grant-PrivilegesOnDomainUser -Username "s2duser" -Domain $ctx["netbiosname"]
 
     $clearPass = $ctx["my_ad_password"]
     Write-JujuInfo "Converting string to SecureString"
@@ -67,31 +87,19 @@ function Get-AdUserAndGroup {
             "CN=Domain Admins,CN=Users"
         )
     }
-    $ret = Marshall-Object $creds
+    $ret = Get-MarshaledObject $creds
     return $ret
 }
 
-function Is-InDomain {
-    param(
-        [Parameter(Mandatory=$true)]
-        [string]$WantedDomain
-    )
-
-    $currentDomain = (gcim Win32_ComputerSystem).Domain.ToLower()
-    $comparedDomain = ($WantedDomain).ToLower()
-    $inDomain = $currentDomain.Equals($comparedDomain)
-    return $inDomain
-}
-
-function Extract-ADCredentials {
+function Get-MyADCredentials {
     Param (
         [string]$creds
     )
     if (!$creds){
         return $null
     }
-    $obj = Unmarshall-Object $creds
-    $passwd = $obj."s2duser"
+    $obj = Get-UnmarshaledObject $creds
+    $passwd = $obj["s2duser"]
     return $passwd
 }
 
@@ -117,12 +125,12 @@ function Get-ActiveDirectoryContext {
                 $ctx["netbiosname"] = relation_get -attr "netbiosname" -rid $rid -unit $unit
                 $ctx["djoin_blob"] = relation_get -attr $blobKey -rid $rid -unit $unit
                 $creds = relation_get -attr "adcredentials" -rid $rid -unit $unit
-                $ctx["my_ad_password"] = Extract-ADCredentials $creds
+                $ctx["my_ad_password"] = Get-MyADCredentials $creds
                 if($already_joined){
                     $ctx.Remove("djoin_blob")
                     $ctx["partial"] = $true
                 }
-                $ctxComplete = Check-ContextComplete -ctx $ctx
+                $ctxComplete = Confirm-ContextComplete -Context $ctx
                 if ($ctxComplete){
                     break
                 }
@@ -130,118 +138,47 @@ function Get-ActiveDirectoryContext {
         }
     }
 
-    $ctxComplete = Check-ContextComplete -ctx $ctx
+    $ctxComplete = Confirm-ContextComplete -Context $ctx
     if (!$ctxComplete){
         return @{}
     }
     return $ctx
 }
 
-function Is-GroupMember {
-	Param(
-		[Parameter(Mandatory=$true)]
-		[string]$Group,
-		[Parameter(Mandatory=$true)]
-        [string]$Username
-	)
-	$members = net localgroup $Group | 
-		where {$_ -AND $_ -notmatch "command completed successfully"} | 
-		select -skip 4
-    foreach ($i in $members){
-		if ($Username -eq $i){
-			return $true
-		}
-	}
-	return $false
-}
-
-function GrantPrivileges-OnDomainUser {
-    Param (
-        [Parameter(Mandatory=$true)]
-        [string]$Username,
-        [Parameter(Mandatory=$true)]
-        [string]$Domain
-    )
-
-    $domUser = "$domain\$Username"
-    Grant-Privilege $domUser SeServiceLogonRight
-
-    $administratorsGroupSID = "S-1-5-32-544"
-    $adminGroup = Convert-SIDToFriendlyName $administratorsGroupSID
-
-    Write-JujuInfo "Checking if $Username is in $adminGroup"
-    $isMember = Is-GroupMember -Group $adminGroup -Username $Username
-    if (!$isMember){
-        Write-JujuInfo "Adding $domUser to group $adminGroup"
-        net localgroup $adminGroup $domUser /add 2>&1 | Out-Null
-    }
-}
-
-function Set-JujudUser {
-    Param (
-        [Parameter(Mandatory=$true)]
-        [string]$Username,
-        [string]$Password,
-        [Parameter(Mandatory=$true)]
-        [string]$Domain
-    )
-    GrantPrivileges-OnDomainUser -Username $Username -Domain $Domain
-
-    $jujuServices = gcim win32_service | Where-Object {$_.Name -like "jujud-*"}
-    foreach($i in $jujuServices){
-        if ($i.StartName -ne $domUser){
-            Write-JujuInfo ($i.Name + "has service start name: " + $i.StartName)
-            Change-ServiceLogon -Service $i.Name -UserName $domUser -Password $Password
-            $shouldReboot = $true
-        }
-    }
-    if ($shouldReboot){
-        juju-reboot.exe --now
-    }
-    return $true
-}
-
 function Invoke-Djoin {    
-    Juju-Log "Started Join Domain"
+    Write-JujuInfo "Started Join Domain"
     $networkName = (Get-MainNetadapter)
     Set-DnsClientServerAddress -InterfaceAlias $networkName -ServerAddresses $params["ip_address"]
-    ipconfig /flushdns
-    if($LASTEXITCODE){
-        Throw "Failed to flush dns"
-    }
+    $cmd = @("ipconfig", "/flushdns")
+    Invoke-JujuCommand -Command $cmd
 
     $params = Get-ActiveDirectoryContext
     if($params["djoin_blob"]){
         $blobFile = Join-Path $env:TMP "djoin-blob.txt"
-        WriteFile-FromBase64 $blobFile $params["djoin_blob"]
-        djoin.exe /requestODJ /loadfile $blobFile /windowspath $env:SystemRoot /localos
-        if($LASTEXITCODE){
-            Throw "Failed to join domain: $LASTEXITCODE"
-        }
-        juju-reboot.exe --now
+        Write-FileFromBase64 -File $blobFile -Content $params["djoin_blob"]
+        $cmd = @("djoin.exe", "/requestODJ", "/loadfile", $blobFile, "/windowspath", $env:SystemRoot, "/localos")
+        Invoke-JujuCommand -Command $cmd
+        Invoke-JujuReboot -Now
     }
 }
 
-function Juju-JoinDomain {
+function Start-JoinDomain {
     # Install-WindowsFeatures $WINDOWS_FEATURES 
     $params = Get-ActiveDirectoryContext
     if ($params["partial"]){
-        Juju-Log "Got partial context"
+        Write-JujuInfo "Got partial context"
     }
-    if ($params.Count){
-        if (!(Is-InDomain $params['ad_domain'])) {
+    if ($params){
+        if (!(Confirm-IsInDomain $params['ad_domain'])) {
             if ($params["partial"]) {
                 Throw "We only got partial context, and computer is not in desired domain."
             }
             Invoke-Djoin
         }
-        GrantPrivileges-OnDomainUser -Username "s2duser" -Domain $params["netbiosname"]
+        Grant-PrivilegesOnDomainUser -Username "s2duser" -Domain $params["netbiosname"]
         return $true
     }
-    Juju-Log "ad-join returned EMPTY"
+    Write-JujuInfo "ad-join returned EMPTY"
     return $false
 }
-
-Export-ModuleMember -Function *
-
 

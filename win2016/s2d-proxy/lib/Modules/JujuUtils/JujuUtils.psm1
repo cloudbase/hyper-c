@@ -541,6 +541,8 @@ function Get-RandomString {
     Returns a random string of characters, suitable for passwords
     .PARAMETER Length
     length of the random string.
+    .PARAMETER Weak
+    Use a smaller set of characters
     #>
     [CmdletBinding()]
     Param(

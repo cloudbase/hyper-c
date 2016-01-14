@@ -1,5 +1,6 @@
 # Copyright 2015 Cloudbase Solutions Srl
 $ErrorActionPreference = 'Stop'
+Import-Module JujuLoger
 
 try {
     $modulePath = "$PSScriptRoot\hooks.psm1"

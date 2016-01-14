@@ -4,13 +4,12 @@
 
 # we want to exit on error
 $ErrorActionPreference = "Stop"
-
 $computername = [System.Net.Dns]::GetHostName()
+Import-Module JujuLoger
 
 try {
-    Import-Module -DisableNameChecking CharmHelpers
-    Import-Module -Force -DisableNameChecking "$psscriptroot\active-directory.psm1"
-
+    Import-Module ADCharmUtils
+    
     $adUser = Get-AdUserAndGroup
 
     $relation_set = @{

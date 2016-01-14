@@ -23,6 +23,7 @@ if ($version -lt 4){
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $moduleHome = Split-Path -Parent $here
 $administratorsGroupSID = "S-1-5-32-544"
+$computername = [System.Net.Dns]::GetHostName()
 
 function Get-ServerLevelKey {
     <#
@@ -549,13 +550,26 @@ function Get-UserGroupMembership {
     )
     PROCESS {
         $group = Get-GroupObjectBySID -SID $GroupSID
+        if($Username.Contains('@')) {
+            $data = $Username.Split('@')
+            $Username = $data[0]
+            $Domain = $data[1]
+        } elseif ($Username.Contains('\')) {
+            $data = $Username.Split('\')
+            $Username = $data[1]
+            $Domain = $data[0]
+        }
+        $scriptBlock =  { $_.Name -eq $Username }
+        if($Domain) {
+            $scriptBlock = { $_.Name -eq $Username -and $_.Domain -eq $Domain}
+        }
         switch($group.GetType().FullName){
             "Microsoft.Management.Infrastructure.CimInstance" {
                 $ret = Get-CimAssociatedInstance -InputObject $group `
-                                                 -ResultClassName Win32_UserAccount | Where-Object { $_.Name -eq $Username }
+                                                 -ResultClassName Win32_UserAccount | Where-Object $scriptBlock
             }
             "System.Management.ManagementObject" {
-                $ret = $group.GetRelated("Win32_UserAccount") | Where-Object {$_.Name -eq $Username}
+                $ret = $group.GetRelated("Win32_UserAccount") | Where-Object $scriptBlock
             }
             default {
                 Throw ("Invalid group object type {0}" -f $group.GetType().FullName)
@@ -587,12 +601,53 @@ function New-LocalAdmin {
     )
     PROCESS {
         Add-WindowsUser $Username $Password | Out-Null
-        $isLocalAdmin = Get-UserGroupMembership -User $Username -GroupSID $administratorsGroupSID
-        if (!$isLocalAdmin) {
-            $groupName = Get-AdministratorsGroup
-            $cmd = @("net.exe", "localgroup", $groupName, $Username, "/add")
-            Invoke-JujuCommand -Command $cmd | Out-Null
+        Add-UserToLocalGroup -Username $Username -GroupSID $administratorsGroupSID
+    }
+}
+
+function Add-UserToLocalGroup {
+    <#
+    .SYNOPSIS
+    Add a user to a localgroup
+    .PARAMETER Username
+    The username to add
+    .PARAMETER GroupSID
+    The SID of the group to add the user to
+    .PARAMETER GroupName
+    The name of the group to add the user to
+    .NOTES
+    GroupSID and GroupName are mutually exclusive
+    #>
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Username,
+        [Parameter(Mandatory=$false)]
+        [string]$GroupSID,
+        [Parameter(Mandatory=$false)]
+        [string]$GroupName
+    )
+    PROCESS {
+        if(!$GroupSID) {
+            if(!$GroupName) {
+                Throw "Neither GroupSID, nor GroupName have been specified"
+            }
         }
+        if($GroupName -and $GroupSID){
+            Throw "The -GroupName and -GroupSID options are mutually exclusive"
+        }
+        if($GroupSID){
+            $GroupName = Get-GroupNameFromSID $GroupSID
+        }
+        if($GroupName) {
+            $GroupSID = (Get-GroupObjectByName $GroupName).SID
+        }
+        $isInGroup = Get-UserGroupMembership -User $Username -GroupSID $GroupSID
+        if($isInGroup){
+            return
+        }
+        $cmd = @("net.exe", "localgroup", $GroupName, $Username, "/add")
+        Invoke-JujuCommand -Command $cmd | Out-Null
     }
 }
 

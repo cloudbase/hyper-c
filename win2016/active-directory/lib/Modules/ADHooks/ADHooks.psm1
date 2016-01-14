@@ -466,8 +466,7 @@ function Install-ADForest {
     if (Is-DomainInstalled $fullDomainName) {
         Write-JujuLog "AD is already installed."
         $dcName = $computername
-        Add-UserToDomainAdmins $localAdministrator $defaultAdministratorPassword $domainName `
-            $dcName $defaultDomainUser
+        Add-UserToDomainAdmins $localAdministrator $defaultAdministratorPassword $domainName $dcName $defaultDomainUser
         return
     }
 
@@ -599,8 +598,7 @@ function Is-DomainInstalled {
             $isForestInstalled = $false
         }
     } catch {
-        Write-JujuErr "Failed to check if AD Domain is installed."
-        Write-JujuErr "$_"
+        Write-JujuErr "Failed to check if AD Domain is installed: $_"
         $isForestInstalled = $false
     }
     return $isForestInstalled
@@ -681,6 +679,8 @@ function Create-CA {
     $ENV:OPENSSL_CONF="$ca_dir\ca.cnf"
     $cmd = @("openssl", "req", "-x509", "-nodes", "-days", "3650", "-newkey", "rsa:2048",
              "-out", "$certs_dir\ca.pem", "-outform", "PEM", "-keyout", "$private_dir\ca.key")
+
+    $ErrorActionPreference = "SilentlyContinue"
     Invoke-JujuCommand -Command $cmd
 
     $ENV:OPENSSL_CONF="$ca_dir\openssl.cnf"
@@ -742,6 +742,9 @@ function Import-Certificate {
     $password = Get-RandomString
     # Import server certificate
     $pfx = Join-Path $env:TEMP cert.pfx
+    if((Test-Path $pfx)){
+        rm -Force $pfx
+    }
 
     $cmd = @(
         "openssl.exe", "pkcs12", "-export", "-in",
@@ -1120,14 +1123,23 @@ function Set-ADUserAvailability {
         } catch {
             $isInAD = $false
         }
+        $djoinKey = ("djoin-" + $compName)
         if(!$isInAD){
-            $djoinKey = ("djoin-" + $compName)
             $blob = Create-DjoinData $compName
             if($blob){
                 $settings[$djoinKey] = $blob
             }
         }else {
-            $settings["already-joined"] = $true
+            $blob = GetBlob-FromLeader -Name $djoinKey
+            if($blob){
+                # a blob has already been generated. we send it again
+                $settings[$djoinKey] = $blob
+            } else {
+                # This computer is already part of this domain, but there is no djoin blob
+                # associated with this machine. This may happen id the computer is manually added
+                # we send a flag to let it know, not to expect a djoin-blob
+                $settings["already-joined"] = $true
+            }
         }
     } 
 
