@@ -165,7 +165,7 @@ function ConvertFrom-Yaml {
         [string]$Yaml,
         [switch]$AllDocuments=$false
     )
-    PROCESS {
+    END {
         if(!$Yaml){
             return
         }

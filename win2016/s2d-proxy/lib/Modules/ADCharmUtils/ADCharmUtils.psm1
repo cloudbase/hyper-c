@@ -47,15 +47,15 @@ function Get-CimCredentials {
         return $false
     }
     Write-JujuInfo "Granting privileges on s2duser"
-    Grant-PrivilegesOnDomainUser -Username "s2duser" -Domain $ctx["netbiosname"] | Out-Null
+    Grant-PrivilegesOnDomainUser -Username "s2duser" -Domain $ctx["netbiosname"]
 
     $clearPass = $ctx["my_ad_password"]
-    Write-JujuInfo "Converting string to SecureString"
     $passwd = ConvertTo-SecureString -AsPlainText -Force $clearPass
     $usr = ($ctx["netbiosname"] + "\s2duser")
+
     $c = [System.Management.Automation.PSCredential](New-Object System.Management.Automation.PSCredential($usr, $passwd))
     Set-Variable -Scope Global -Name cimCreds -Value $c
-    Write-JujuInfo ("Returning: " + $c.GetType().FullName)
+    
     return $c
 }
 
@@ -105,51 +105,48 @@ function Get-MyADCredentials {
 }
 
 function Get-ActiveDirectoryContext {
-    $ctx = @{
-        "ip_address" = $null;
-        "ad_domain" = $null;
-        "my_ad_password" = $null;
-        "djoin_blob" = $null;
-        "netbiosname" = $null;
-    }
-
     $blobKey = ("djoin-" + $computername)
-    $relations = relation_ids -reltype "ad-join"
-    foreach($rid in $relations){
-        $related_units = related_units -relid $rid
-        Write-JujuInfo "Found related units: $related_units"
-        if($related_units){
-            foreach($unit in $related_units){
-                $already_joined = Get-JujuRelation -Attribute "already-joined" -RelationID $rid -unit $unit
-                $ctx["ip_address"] = Get-JujuRelation -Attribute "address" -RelationID $rid -unit $unit
-                $ctx["ad_domain"] = Get-JujuRelation -Attribute "domainName" -RelationID $rid -unit $unit
-                $ctx["netbiosname"] = Get-JujuRelation -Attribute "netbiosname" -RelationID $rid -unit $unit
-                $ctx["djoin_blob"] = Get-JujuRelation -Attribute $blobKey -RelationID $rid -unit $unit
-                $creds = Get-JujuRelation -Attribute "adcredentials" -RelationID $rid -unit $unit
-                $ctx["my_ad_password"] = Get-MyADCredentials $creds
-                if($already_joined){
-                    $ctx.Remove("djoin_blob")
-                    $ctx["partial"] = $true
-                }
-                $ctxComplete = Confirm-ContextComplete -Context $ctx
-                if ($ctxComplete){
-                    break
-                }
-            }
-        }
+    $requiredCtx = @{
+        "already-joined" = $null;
+        "address" = $null;
+        "domainName" = $null;
+        "netbiosname" = $null;
+        "adcredentials" = $null;
     }
 
-    $ctxComplete = Confirm-ContextComplete -Context $ctx
-    if (!$ctxComplete){
+    $optionalContext = @{
+        $blobKey = $null;
+    }
+    $ctx = Get-JujuRelationContext -Relation "ad-join" -RequiredContext $requiredCtx -OptionalContext $optionalContext
+
+    Write-JujuInfo ("Keys: " + $ctx.Keys)
+    Write-JujuInfo ("Values: " + $ctx.Values)
+    # Required context not found
+    if(!$ctx.Count) {
         return @{}
     }
+    # A node may be added to an active directory domain outside of Juju, or it may be added by another charm colocated.
+    # If another charm adds the computer to AD, we still get back a djoin_blob, but if we manually add a computer, the
+    # djoin blob will be empty. That is the reason we make the djoin blob optional.
+    if($ctx["already-joined"] -eq $false -and !$ctx[$blobKey]){
+        return @{}
+    }
+
+    # replace the djoin data key with something less dynamic
+    $djoin_data = $ctx[$blobKey]
+    $ctx.Remove($blobKey)
+    $ctx["djoin_blob"] = $djoin_data
+
+    # Deserialize credential info
+    $ctx["my_ad_password"] = Get-MyADCredentials $ctx["adcredentials"]
+    $ctx.Remove("adcredentials")
     return $ctx
 }
 
 function Invoke-Djoin {    
     Write-JujuInfo "Started Join Domain"
     $networkName = (Get-MainNetadapter)
-    Set-DnsClientServerAddress -InterfaceAlias $networkName -ServerAddresses $params["ip_address"]
+    Set-DnsClientServerAddress -InterfaceAlias $networkName -ServerAddresses $params["address"]
     $cmd = @("ipconfig", "/flushdns")
     Invoke-JujuCommand -Command $cmd
 
@@ -166,18 +163,16 @@ function Invoke-Djoin {
 function Start-JoinDomain {
     # Install-WindowsFeatures $WINDOWS_FEATURES 
     $params = Get-ActiveDirectoryContext
-    if ($params["partial"]){
-        Write-JujuInfo "Got partial context"
-    }
-    if ($params){
-        if (!(Confirm-IsInDomain $params['ad_domain'])) {
-            if ($params["partial"]) {
-                Throw "We only got partial context, and computer is not in desired domain."
+    if ($params.Count){
+        if (!(Confirm-IsInDomain $params['domainName'])) {
+            if (!$params["djoin_blob"] -and $params["already-joined"]) {
+                Throw "The domain controller reports that a computer with the same hostname as this unit is already added to the domain, and we did not get any domain join information."
             }
             Invoke-Djoin
+        } else {
+            Grant-PrivilegesOnDomainUser -Username "s2duser" -Domain $params["netbiosname"]
+            return $true
         }
-        Grant-PrivilegesOnDomainUser -Username "s2duser" -Domain $params["netbiosname"]
-        return $true
     }
     Write-JujuInfo "ad-join returned EMPTY"
     return $false

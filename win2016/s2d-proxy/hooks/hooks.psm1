@@ -344,8 +344,8 @@ function Start-S2DRelationChanged {
     }
     $clusterName = charm_config -scope "cluster-name"
     $fqdn = (gcim Win32_ComputerSystem).Domain.ToLower()
-    if($fqdn -ne $ctx["ad_domain"]){
-        Throw ("We appear do be part or the wrong domain. Expected: {0}, We Are in domain: {1}" -f @($ctx["domain_name"], $fqdn))
+    if($fqdn -ne $ctx["domainName"]){
+        Throw ("We appear do be part or the wrong domain. Expected: {0}, We Are in domain: {1}" -f @($ctx["domainName"], $fqdn))
     }
 
     $scaleoutname = charm_config -scope "scaleout-name"

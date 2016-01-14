@@ -56,7 +56,7 @@ function Connect-ToADController {
         Invoke-JujuReboot -Now
     }
 
-    $localAdminPassword = Get-RandomString
+    $localAdminPassword = Get-RandomString -Length 20 -Weak
     New-LocalAdmin $localAdminUsername $localAdminPassword
     $passwordSecure = ConvertTo-SecureString -String $localAdminPassword -AsPlainText -Force
     $localCredential = New-Object PSCredential($localAdminUsername, $passwordSecure)
@@ -162,7 +162,7 @@ function Disconnect-FromADDomain {
 
     Write-JujuLog "Leaving AD domain..."
 
-    $localAdminPassword = Get-RandomString
+    $localAdminPassword = Get-RandomString -Length 20 -Weak
     $localAdminUsername = "adminlocal"
     New-LocalAdmin $localAdminUsername $localAdminPassword
     $passwordSecure = ConvertTo-SecureString -String $localAdminPassword -asPlainText -Force

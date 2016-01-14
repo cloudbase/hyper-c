@@ -27,12 +27,12 @@ $ADUserSection = "ADCharmUsers"
 function Start-TimeResync {
     Write-JujuInfo "Synchronizing time..."
     $ts = @("tzutil.exe", "/s", "UTC")
-    Invoke-JujuCommand -Command $ts
+    Invoke-JujuCommand -Command $ts | Out-Null
 
     try {
         Start-Service "w32time"
         $manualTS = @("w32tm.exe", "/config", "/manualpeerlist:time.windows.com", "/syncfromflags:manual", "/update")
-        Invoke-JujuCommand -Command $manualTS
+        Invoke-JujuCommand -Command $manualTS | Out-Null
     } catch {
         # not a fatal error
         Write-JujuErr "Failed to synchronize time: $_"
@@ -50,7 +50,7 @@ function CreateNew-ADUser {
     if (!$dn) {
         Throw "Could not get DistinguishedName."
     }
-    $passwd = Get-RandomString -Length 20
+    $passwd = Get-RandomString -Length 20 -Weak
     $secPass = ConvertTo-SecureString -AsPlainText $passwd -Force
     $adPath = "CN=Users," + $dn
 
@@ -322,7 +322,7 @@ function Create-ServicesUsers {
         Write-JujuInfo "Adding user $adminUsername to $administratorsGroupName"
         $admUsr = "$domain\$adminUsername"
         $cmd = @("net.exe", "localgroup", "$administratorsGroupName", "$admUsr", "/add")
-        Invoke-JujuCommand -Command $cmd
+        Invoke-JujuCommand -Command $cmd | Out-Null
     }
 
     $defaultAdminPassword = Get-JujuCharmConfig -Scope "default-administrator-password"
@@ -525,7 +525,7 @@ function Add-DNSForwarders {
     Start-ExecuteWithRetry {
         $hostname = $computername
         $cmd = @("dnscmd.exe", $hostname, "/resetforwarders", $nameservers)
-        Invoke-JujuCommand -Command $cmd
+        Invoke-JujuCommand -Command $cmd | Out-Null
     } -MaxRetryCount 3 -RetryInterval 30
 }
 
@@ -681,7 +681,7 @@ function Create-CA {
              "-out", "$certs_dir\ca.pem", "-outform", "PEM", "-keyout", "$private_dir\ca.key")
 
     $ErrorActionPreference = "SilentlyContinue"
-    Invoke-JujuCommand -Command $cmd
+    Invoke-JujuCommand -Command $cmd | Out-Null
 
     $ENV:OPENSSL_CONF="$ca_dir\openssl.cnf"
     $fqdn = $computername
@@ -691,14 +691,14 @@ function Create-CA {
         "-sha1", "-keyout", "$private_dir\cert.key", "-keyform",
         "PEM", "-out", "$certs_dir\cert.req", "-outform", "PEM",
         "-subj", "/C=US/ST=Washington/L=Seattle/emailAddress=nota@realone.com/organizationName=IT/CN=$fqdn")
-    Invoke-JujuCommand -Command $cmd
+    Invoke-JujuCommand -Command $cmd | Out-Null
 
     $ENV:OPENSSL_CONF="$ca_dir\ca.cnf"
     $cmd = @(
         "openssl", "ca", "-batch", "-notext", "-in",
         "$certs_dir\cert.req", "-out", "$certs_dir\cert.pem",
         "-extensions", "v3_req_server")
-    Invoke-JujuCommand -Command $cmd
+    Invoke-JujuCommand -Command $cmd | Out-Null
 
     $ret = @{
         "ca"="$certs_dir\ca.pem";
@@ -739,7 +739,7 @@ function Import-Certificate {
         Throw "$cert_file or $key_file not found"
     }
 
-    $password = Get-RandomString
+    $password = Get-RandomString -Length 15 -Weak
     # Import server certificate
     $pfx = Join-Path $env:TEMP cert.pfx
     if((Test-Path $pfx)){
@@ -750,7 +750,7 @@ function Import-Certificate {
         "openssl.exe", "pkcs12", "-export", "-in",
         "$cert_file", "-inkey", $key_file, "-out",
         $pfx, "-password", "pass:$password")
-    Invoke-JujuCommand -Command $cmd
+    Invoke-JujuCommand -Command $cmd | Out-Null
 
     $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(
         $pfx, $password,
@@ -877,7 +877,7 @@ function Uninstall-ActiveDomainController {
     $adCredential = New-Object -TypeName PSCredential -ArgumentList @("$netbiosName\$user", $passwordSecure)
 
     $cmd = @("repadmin.exe", "/syncall")
-    Invoke-JujuCommand -Command $cmd
+    Invoke-JujuCommand -Command $cmd | Out-Null
 
     $domainControllers = (Get-ADDomainController -Filter {Enabled -eq $true}).Name
     if (!($domainControllers -contains $hostname)) {
@@ -1086,7 +1086,7 @@ function Create-DjoinData {
     $domain = Get-JujuCharmConfig -Scope 'domain-name'
     $cmd = @("djoin.exe", "/provision", "/domain", $domain, "/machine", $computername, "/savefile", $blobFile)
     try {
-        Invoke-JujuCommand -Command $cmd
+        Invoke-JujuCommand -Command $cmd | Out-Null
         $blob = Convert-FileToBase64 $blobFile
         SetBlob-ToLeader -Name $blobName -Blob $blob | Out-Null
     } finally {
@@ -1119,9 +1119,11 @@ function Set-ADUserAvailability {
         $djoinKey = ("djoin-" + $compName)
         if(!$isInAD){
             $blob = Create-DjoinData $compName
-            if($blob){
-                $settings[$djoinKey] = $blob
+            if(!$blob){
+                Throw "Failed to generate domain join information"
             }
+            $settings[$djoinKey] = $blob
+            $settings["already-joined"] = $false
         }else {
             $blob = GetBlob-FromLeader -Name $djoinKey
             if($blob){
@@ -1152,7 +1154,7 @@ function Set-ADUserAvailability {
     Write-JujuLog "Finished setting AD user relation."
 }
 
-function Run-ADRelationDepartedHook {
+function Start-ADRelationDepartedHook {
     $compName = Get-JujuRelation -Attr "computername"
     $blobName = ("djoin-" + $compName)
     if ($compName){
@@ -1161,12 +1163,13 @@ function Run-ADRelationDepartedHook {
             return $true
         }
         try {
-            $isInDomain = Get-ADComputer $compName -ErrorAction SilentlyContinue
+            $computerObject = Get-ADComputer $compName -ErrorAction SilentlyContinue
         }catch{
-            $isInDomain = $false
+            $computerObject = $false
         }
-        if($isInDomain){
-            Remove-ADComputer $compName -Confirm:$false
+        if($computerObject){
+            Write-JujuWarning "Removing $compName form AD"
+            $computerObject | Remove-ADObject -Recursive -Confirm:$false
         }
         RemoveBlob-FromLeader -Name $blobName
         $storage = Join-Path $env:TEMP "blobs"
@@ -1301,3 +1304,4 @@ New-Alias -Name Run-ADRelationChangedHook -Value Start-ADRelationChangedHook
 New-Alias -Name Run-AddControllerRelationJoinedHook -Value Start-AddControllerRelationJoinedHook
 New-Alias -Name Run-AddControllerRelationChangedHook -Value Start-AddControllerRelationChangedHook
 New-Alias -Name Run-ADRelationJoinedHook -Value Start-ADRelationJoinedHook
+New-Alias -Name Run-ADRelationDepartedHook -Value Start-ADRelationDepartedHook
