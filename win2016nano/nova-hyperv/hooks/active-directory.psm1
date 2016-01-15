@@ -12,6 +12,19 @@ $nova_compute = "nova-compute"
 
 Import-Module -Force -DisableNameChecking CharmHelpers
 
+function Confirm-IsInDomain {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$WantedDomain
+    )
+
+    $currentDomain = (Get-ManagementObject -Class Win32_ComputerSystem).Domain.ToLower()
+    $comparedDomain = ($WantedDomain).ToLower()
+    $inDomain = $currentDomain.Equals($comparedDomain)
+
+    return $inDomain
+}
+
 function Get-AdUserAndGroup {
     $creds = @{
         "nova-hyperv"=@(
@@ -22,19 +35,7 @@ function Get-AdUserAndGroup {
     return $ret
 }
 
-function Is-InDomain {
-    param(
-        [Parameter(Mandatory=$true)]
-        [string]$WantedDomain
-    )
-
-    $currentDomain = (gcim Win32_ComputerSystem).Domain.ToLower()
-    $comparedDomain = ($WantedDomain).ToLower()
-    $inDomain = $currentDomain.Equals($comparedDomain)
-    return $inDomain
-}
-
-function Extract-NovaADCredentials {
+function Get-MyADCredentials {
     Param (
         [System.Object]$creds
     )
@@ -46,166 +47,97 @@ function Extract-NovaADCredentials {
     return $passwd
 }
 
-function Get-RelationParams($type){
-    $ctx = @{
-        "ad_host" = $null;
-        "ip_address" = $null;
-        "ad_hostname" = $null;
-        "ad_username" = $null;
-        "ad_password" = $null;
-        "ad_domain" = $null;
-        "my_ad_password" = $null;
-        "djoin_blob" = $null;
-        "netbiosname" = $null;
-        "context" = $True;
-    }
-
+function Get-ActiveDirectoryContext {
     $blobKey = ("djoin-" + $computername)
-    $relations = relation_ids -reltype $type
-    foreach($rid in $relations){
-        $related_units = related_units -relid $rid
-        if($related_units -ne $Null -and $related_units.Count -gt 0){
-            foreach($unit in $related_units){
-                $ctx["ad_host"] = relation_get -attr "private-address" -rid $rid -unit $unit
-                $ctx["ip_address"] = relation_get -attr "address" -rid $rid -unit $unit
-                $ctx["ad_hostname"] = relation_get -attr "hostname" -rid $rid -unit $unit
-                $ctx["ad_username"] = relation_get -attr "username" -rid $rid -unit $unit
-                $ctx["ad_password"] = relation_get -attr "password" -rid $rid -unit $unit
-                $ctx["ad_domain"] = relation_get -attr "domainName" -rid $rid -unit $unit
-                $ctx["netbiosname"] = relation_get -attr "netbiosname" -rid $rid -unit $unit
-                $ctx["djoin_blob"] = relation_get -attr $blobKey -rid $rid -unit $unit
-                $creds = relation_get -attr "nano-ad-credentials" -rid $rid -unit $unit
-                $ctx["my_ad_password"] = Extract-NovaADCredentials $creds
-                $ctxComplete = Check-ContextComplete -ctx $ctx
-                if ($ctxComplete){
-                    break
-                }
-            }
-        }
+    $requiredCtx = @{
+        "already-joined" = $null;
+        "address" = $null;
+        "domainName" = $null;
+        "netbiosname" = $null;
+        "adcredentials" = $null;
     }
 
-    $ctxComplete = Check-ContextComplete -ctx $ctx
-    if (!$ctxComplete){
-        $ctx["context"] = $False
+    $optionalContext = @{
+        $blobKey = $null;
+    }
+    $ctx = Get-JujuRelationContext -Relation "ad-join" -RequiredContext $requiredCtx -OptionalContext $optionalContext
+
+    # Required context not found
+    if(!$ctx.Count) {
+        return @{}
+    }
+    # A node may be added to an active directory domain outside of Juju, or it may be added by another charm colocated.
+    # If another charm adds the computer to AD, we still get back a djoin_blob, but if we manually add a computer, the
+    # djoin blob will be empty. That is the reason we make the djoin blob optional.
+    if($ctx["already-joined"] -eq $false -and !$ctx[$blobKey]){
+        return @{}
     }
 
+    # replace the djoin data key with something less dynamic
+    $djoin_data = $ctx[$blobKey]
+    $ctx.Remove($blobKey)
+    $ctx["djoin_blob"] = $djoin_data
+
+    # Deserialize credential info
+    $ctx["my_ad_password"] = Get-MyADCredentials $ctx["adcredentials"]
+    $ctx.Remove("adcredentials")
     return $ctx
 }
 
-function Is-GroupMember {
-	Param(
-		[Parameter(Mandatory=$true)]
-		[string]$Group,
-		[Parameter(Mandatory=$true)]
-                [string]$Username
-	)
-	$members = net localgroup $Group | 
-		where {$_ -AND $_ -notmatch "command completed successfully"} | 
-		select -skip 4
-	$ret = New-Object PSObject -Property @{
-		Computername = $computername
-		Group = $Group
-		Members=$members
-		}
-        foreach ($i in $ret.Members){
-		if ($Username -eq $i){
-			return $true
-		}
-	}
-	return $false
-}
-
-function Set-NovaUser {
+function Grant-PrivilegesOnDomainUser {
     Param (
         [Parameter(Mandatory=$true)]
         [string]$Username,
-        [string]$Password,
         [Parameter(Mandatory=$true)]
         [string]$Domain
     )
+
     $domUser = "$domain\$Username"
     Grant-Privilege $domUser SeServiceLogonRight
-    #TODO: Find group name using SID. This does not currently support i18n
-    $isMember = Is-GroupMember -Group "Administrators" -Username $domUser
-    if (!$isMember){
-    	net localgroup Administrators $domUser /add
-    }
-    Change-ServiceLogon $nova_compute $domUser $Password
-    return $true
+
+    $administratorsGroupSID = "S-1-5-32-544"
+    Add-UserToLocalGroup -Username $domUser -GroupSID $administratorsGroupSID
 }
 
-function Invoke-Djoin {    
-    Write-JujuInfo "Started Join Domain"
-    $networkName = (Get-MainNetadapter)
-    Set-DnsClientServerAddress -InterfaceAlias $networkName -ServerAddresses $params["ip_address"]
-    ipconfig /flushdns
-    if($LASTEXITCODE){
-        Throw "Failed to flush dns"
-    }
+function Invoke-Djoin {
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$params
+    )
+    PROCESS {
+        Write-JujuInfo "Started Join Domain"
 
-    $params = Get-RelationParams('ad-join')
-    if($params["djoin_blob"]){
-        $blobFile = Join-Path $env:TMP "djoin-blob.txt"
-        WriteFile-FromBase64 $blobFile $params["djoin_blob"]
-        djoin.exe /requestODJ /loadfile $blobFile /windowspath $env:SystemRoot /localos
-        if($LASTEXITCODE){
-            Throw "Failed to join domain: $LASTEXITCODE"
-        }
-        juju-reboot.exe --now
-    }
-}
+        $networkName = (Get-MainNetadapter)
+        Set-DnsClientServerAddress -InterfaceAlias $networkName -ServerAddresses $params["address"]
+        $cmd = @("ipconfig", "/flushdns")
+        Invoke-JujuCommand -Command $cmd
 
-function Set-ExtraRelationParams {
-    $adGroup = "CN=Nova,OU=OpenStack"
-
-    $encGr = ConvertTo-Base64 $adGroup
-    $relation_set = @{
-        'computerGroup'=$encGr;
-    }
-    $ret = relation_set -relation_settings $relation_set
-    if ($ret -eq $false){
-       Write-JujuWarning "Failed to set extra relation params"
-    }
-}
-
-function Ping-Subordonate {
-    $ready = "False"
-    $params = Get-RelationParams('ad-join')
-    if ($params['context']){
-        if ((Is-InDomain $params['ad_domain'])) {
-            $ready = "True"
+        if($params["djoin_blob"]){
+            $blobFile = Join-Path $env:TMP "djoin-blob.txt"
+            Write-FileFromBase64 -File $blobFile -Content $params["djoin_blob"]
+            $cmd = @("djoin.exe", "/requestODJ", "/loadfile", $blobFile, "/windowspath", $env:SystemRoot, "/localos")
+            Invoke-JujuCommand -Command $cmd
+            Invoke-JujuReboot -Now
         }
     }
-
-    $relation_set = @{
-        "ready"=$ready;
-    }
-    $relations = relation_ids -reltype 's2d'
-    Write-JujuInfo "Found relations $relations"
-    foreach($rid in $relations){
-        $ready = relation_set -relation_settings $relation_set -rid $rid
-    }
 }
 
-function Join-Domain{
+function Start-JoinDomain {
     # Install-WindowsFeatures $WINDOWS_FEATURES 
-    $params = Get-RelationParams('ad-join')
-    if ($params['context']){
-        if (!(Is-InDomain $params['ad_domain'])) {
-            Invoke-Djoin
-        }else {
-            Set-ExtraRelationParams
-            $username = "nova-hyperv"
-            $pass = $params["my_ad_password"]
-            Stop-Service $nova_compute
-            Write-JujuInfo "Setting nova user"
-            Set-NovaUser -Username $username -Password $pass -Domain $params['netbiosname']
-            Start-Service $nova_compute
-            Ping-Subordonate
+    $params = Get-ActiveDirectoryContext
+    if ($params.Count){
+        if (!(Confirm-IsInDomain $params['domainName'])) {
+            if (!$params["djoin_blob"] -and $params["already-joined"]) {
+                Throw "The domain controller reports that a computer with the same hostname as this unit is already added to the domain, and we did not get any domain join information."
+            }
+            Invoke-Djoin -params $params
+        } else {
+            return $true
         }
-    } else {
-        Write-JujuWarning "ad-join returned EMPTY. Peer not yet ready?"
     }
+    Write-JujuInfo "ad-join returned EMPTY"
+    return $false
 }
 
 Export-ModuleMember -Function *

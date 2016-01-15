@@ -70,10 +70,8 @@ function Grant-Privilege {
     }
     PROCESS {
         Write-JujuInfo "Running: $privBin -g $User -v $Grant"
-        & $privBin -g $User -v $Grant
-        if ($LASTEXITCODE){
-            Throw "SetUserAccountRights.exe: exited with status $LASTEXITCODE"
-        }
+        $cmd = @($privBin, "-g", "$User", "-v", $Grant)
+        Invoke-JujuCommand -Command $cmd | Out-Null
     }
 }
 
@@ -531,10 +529,53 @@ function Get-AdministratorsGroup {
     }
 }
 
+function Confirm-IsMemberOfGroup {
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$GroupSID,
+        [Parameter(Mandatory=$true)]
+        [string]$Username
+    )
+    PROCESS {
+        $inDomain = (Get-ManagementObject -Class Win32_ComputerSystem).PartOfDomain
+        if($inDomain){
+            $domainName = (Get-ManagementObject -Class Win32_NTDomain).DomainName
+            $myDomain = [Environment]::UserDomainName
+            if($domainName -eq $myDomain) {
+                return (Get-UserGroupMembership -Username $Username -GroupSID $GroupSID)
+            }
+        }
+        $name = Get-GroupNameFromSID -SID $GroupSID
+        return Get-LocalUserGroupMembership -Group $name -Username $Username
+    }
+}
+
+function Get-LocalUserGroupMembership {
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Group,
+        [Parameter(Mandatory=$true)]
+        [string]$Username
+    )
+    PROCESS {
+        $cmd = @("net.exe", "localgroup", $Group)
+        $ret = Invoke-JujuCommand -Command $cmd
+        $members =  $ret | where {$_ -AND $_ -notmatch "command completed successfully"} | select -skip 4
+        foreach ($i in $members){
+            if ($Username -eq $i){
+                return $true
+            }
+        }
+        return $false
+    }
+}
+
 function Get-UserGroupMembership {
     <#
     .SYNOPSIS
-    Checks whether or not a user is part of a particular local group.
+    Checks whether or not a user is part of a particular group. If running under a local user, domain users will not be visible.
     .PARAMETER Username
     The username to verify
     .PARAMETER GroupSID
@@ -642,7 +683,7 @@ function Add-UserToLocalGroup {
         if($GroupName) {
             $GroupSID = (Get-GroupObjectByName $GroupName).SID
         }
-        $isInGroup = Get-UserGroupMembership -User $Username -GroupSID $GroupSID
+        $isInGroup = Confirm-IsMemberOfGroup -User $Username -Group $GroupSID
         if($isInGroup){
             return
         }

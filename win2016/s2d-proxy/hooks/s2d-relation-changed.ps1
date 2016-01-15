@@ -11,14 +11,14 @@ try {
 
     Write-JujuInfo "Running relation changed"
     $script = "$psscriptroot\s2d-relation-changed-real.ps1"
-    $creds = Get-CimCredentials
-    if(!$creds){
-        Write-JujuWarning "Failed to get Cim credentials. Machine not yet in AD?"
-        return $true
+    $ctx = Get-ActiveDirectoryContext
+    if(!$ctx["adcredentials"]){
+        Write-JujuWarning "Failed to get credentials. Machine not yet in AD?"
+        return
     }
     $args = @("-File", "$script")
     Write-JujuInfo "Running $script"
-    $exitCode = Start-ProcessAsUser -Command "$PShome\powershell.exe" -Arguments ($args -Join " ") -Credential $creds
+    $exitCode = Start-ProcessAsUser -Command "$PShome\powershell.exe" -Arguments ($args -Join " ") -Credential $ctx["adcredentials"][0]["pscredentials"]
     if($exitCode){
         Throw "Failed run $script --> $exitCode"
     }

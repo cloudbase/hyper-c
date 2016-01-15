@@ -1,5 +1,13 @@
 $ErrorActionPreference = "Stop"
 
+$version = $PSVersionTable.PSVersion.Major
+if ($version -lt 4){
+    # Get-CimInstance is not supported on powershell versions earlier then 4
+    New-Alias -Name Get-ManagementObject -Value Get-WmiObject
+}else{
+    New-Alias -Name Get-ManagementObject -Value Get-CimInstance
+}
+
 function Invoke-JujuCommand {
     <#
     .SYNOPSIS

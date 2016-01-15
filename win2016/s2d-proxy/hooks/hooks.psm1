@@ -17,11 +17,6 @@ $global:cimCreds = $null
 function Get-S2DNodes {
     $relations = relation_ids -reltype 's2d'
     $nodes = @()
-    $creds = Get-CimCredentials
-    if(!$creds){
-        Write-JujuWarning "Could not get credentials"
-        return $nodes
-    }
 
     $ctx = Get-ActiveDirectoryContext
     if(!$ctx.Count) {
@@ -180,13 +175,9 @@ function Get-VolumePath {
         [string]$clusterName
     )
     $node = (Get-ClusterNode -Cluster $clusterName).name[0]
-    $creds = Get-CimCredentials
-    if(!$creds) {
-        Throw "Failed to get CIM credentials"
-    }
 
     $query = "SELECT * FROM MSFT_VirtualDisk WHERE FriendlyName='{0}'" -f $vol
-    $obj = Get-WmiObject -Namespace "root/microsoft/windows/storage" -Query $query -ComputerName $node -Credential $creds
+    $obj = Get-WmiObject -Namespace "root/microsoft/windows/storage" -Query $query -ComputerName $node
     if(!$obj){
         Throw "Failed to get VirtualDisk"
     }
