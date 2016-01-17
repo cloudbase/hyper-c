@@ -1,1 +1,0 @@
-{"version":"1.19.3-win2012r2-amd64","url":"http://192.168.80.131/MAAS/api/1.0/files/?key=652bf9d4-06a0-11e4-898a-000c29adbbec\u0026op=get_by_key","sha256":"5894a248b8e548b2b58fcb5b2b236cac2c3150765a0444e675508114bdc8c77c","size":7307964}

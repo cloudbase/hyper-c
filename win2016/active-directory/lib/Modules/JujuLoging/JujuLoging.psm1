@@ -123,7 +123,7 @@ function Write-JujuErr {
         [string]$Message
     )
     PROCESS {
-        Write-JujuLog -Message $Msg -LogLevel ERROR
+        Write-JujuLog -Message $Message -LogLevel ERROR
     }
 }
 
@@ -149,7 +149,7 @@ function Write-JujuError {
         [bool]$Fatal=$true
     )
     PROCESS {
-        Write-JujuLog -Message $Msg -LogLevel ERROR
+        Write-JujuLog -Message $Message -LogLevel ERROR
         if ($Fatal) {
             Throw $Msg
         }
@@ -211,3 +211,5 @@ function Write-HookTracebackToLog {
         }
     }
 }
+
+Export-ModuleMember -Function * -Alias *

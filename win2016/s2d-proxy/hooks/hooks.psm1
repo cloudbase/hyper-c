@@ -26,16 +26,16 @@ function Get-S2DNodes {
 
     foreach($rid in $relations){
         Write-JujuInfo "Getting related units for: $rid"
-        $related_units = related_units -relid $rid
+        $related_units = Get-JujuRelatedUnits -RelationId $rid
         Write-JujuInfo "Found related units: $related_units"
         foreach($unit in $related_units){
-            $computername = relation_get -attr "computername" -rid $rid -unit $unit
+            $computername = Get-JujuRelation -Attribute "computername" -RelationId $rid -Unit $unit
             if(!$computername){
                 continue
             }
-            $ready = relation_get -attr "ready" -rid $rid -unit $unit
-            Write-JujuInfo "Unit $unit has ready state set to: $ready"
-            if(!$ready -or $ready -eq "False"){
+            $ready = Get-JujuRelation -Attribute "ready" -RelationId $rid -Unit $unit
+            Write-JujuInfo ("Unit $unit has ready state set to: {0} --> {1}" -f ($ready, $ready.GetType().FullName))
+            if(!$ready){
                 Write-JujuInfo "Node $computername is not yet ready"
                 continue
             }
@@ -74,7 +74,7 @@ function Create-S2DCluster {
     if(!$cluster){
         Write-JujuInfo "Running create cluster"
         New-Cluster -Name $ClusterName -Node $nodes -NoStorage -StaticAddress $staticAddress.Split(" ")
-        Flush-DNS
+        Clear-DnsClientCache
     }
     return $true
 }
@@ -88,7 +88,7 @@ function Add-NodesToCluster {
         [Parameter(Mandatory=$true)]
         [string]$ClusterName
     )
-    Flush-DNS
+    Clear-DnsClientCache
     try {
         $cluster = Get-Cluster -Name $ClusterName -Domain $Domain
         if (!$cluster){
@@ -151,7 +151,7 @@ function Create-StoragePool {
         [Parameter(Mandatory=$true)]
         [string]$StoragePool
     )
-    Flush-DNS
+    Clear-DnsClientCache
 
     $pool = Get-StoragePool -FriendlyName $StoragePool -CimSession $Session -ErrorAction SilentlyContinue
     if($pool){
@@ -333,16 +333,18 @@ function Start-S2DRelationChanged {
     if(!$ctx.Count) {
         return $false
     }
-    $clusterName = charm_config -scope "cluster-name"
+    $cfg = Get-JujuCharmConfig
+    $clusterName = $cfg["cluster-name"]
+
     $fqdn = (gcim Win32_ComputerSystem).Domain.ToLower()
     if($fqdn -ne $ctx["domainName"]){
         Throw ("We appear do be part or the wrong domain. Expected: {0}, We Are in domain: {1}" -f @($ctx["domainName"], $fqdn))
     }
 
-    $scaleoutname = charm_config -scope "scaleout-name"
-    $volumeName = charm_config -scope "volume-name"
-    $storagePool = charm_config -scope "storage-pool"
-    $minimumUnits = charm_config -scope "minimum-nodes"
+    $scaleoutname = $cfg["scaleout-name"]
+    $volumeName = $cfg["volume-name"]
+    $storagePool = $cfg["storage-pool"]
+    $minimumUnits = $cfg["minimum-nodes"]
     $nodes = Get-S2DNodes
 
     #juju-log.exe "Running Run-SetKCD"
@@ -391,15 +393,15 @@ function Run-SetKCD {
     if(!$name){
         return $false
     }
-    $charm_dir = charm_dir
+    $charm_dir = Get-JujuCharmDir
 
-    $relations = relation_ids -reltype 's2d'
+    $relations = Get-JujuRelationIds -Relation 's2d'
     $peers = @()
     foreach($rid in $relations){
-        $related_units = related_units -relid $rid
+        $related_units = Get-JujuRelatedUnits -RelationId $rid
         foreach($unit in $related_units){
-            $name = relation_get -attr "computername" -rid $rid -unit $unit
-            $ready = relation_get -attr "ready" -rid $rid -unit $unit 
+            $name = Get-JujuRelation -Attribute "computername" -RelationId $rid -Unit $unit
+            $ready = Get-JujuRelation -Attribute "ready" -RelationId $rid -Unit $unit 
             if($ready){ 
                 $peers += $name
             }

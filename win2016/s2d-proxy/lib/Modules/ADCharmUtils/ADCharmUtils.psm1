@@ -53,16 +53,6 @@ function Get-NewCimSession {
     Throw "Failed to get a CIM session on any of the provided nodes: $Nodes"
 }
 
-function Get-AdUserAndGroup {
-    $creds = @{
-        "s2duser"=@(
-            "CN=Domain Admins,CN=Users"
-        )
-    }
-    $ret = Get-MarshaledObject $creds
-    return $ret
-}
-
 function Get-MyADCredentials {
     Param (
         [Parameter(Mandatory=$false)]

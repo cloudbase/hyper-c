@@ -550,7 +550,7 @@ function Get-JujuRelationContext {
         [Parameter(Mandatory=$true)]
         [Hashtable]$RequiredContext,
         [Parameter(Mandatory=$false)]
-        [hashtable]$OptionalContext=@()
+        [hashtable]$OptionalContext=@{}
     )
     PROCESS {
         $relData = Get-JujuRelationsOfType -Relation $Relation
@@ -564,7 +564,9 @@ function Get-JujuRelationContext {
                 continue
             }
             foreach($i in $OptionalContext.Keys) {
-                $ctx[$i] = $r[$i]
+                if($r[$i]) {
+                    $ctx[$i] = $r[$i]
+                }
             }
             return $ctx
         }
@@ -1198,3 +1200,5 @@ New-Alias -Name relations_of_type -Value Get-JujuRelationsOfType
 New-Alias -Name is_relation_made -Value Confirm-JujuRelationCreated
 New-Alias -Name unit_get -Value Get-JujuUnit
 New-Alias -Name unit_private_ip -Value Get-JujuUnitPrivateIP
+
+Export-ModuleMember -Function * -Alias *

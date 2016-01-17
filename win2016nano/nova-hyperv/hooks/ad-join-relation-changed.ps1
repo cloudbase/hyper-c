@@ -4,26 +4,18 @@
 
 # we want to exit on error
 $ErrorActionPreference = "Stop"
+Import-Module JujuLoging
+Import-Module JujuWindowsUtils
+Import-Module JujuUtils
 
-function Set-ExtraRelationParams {
-    $adGroup = "CN=Nova,OU=OpenStack"
-
-    $encGr = ConvertTo-Base64 $adGroup
-    $relation_set = @{
-        'computerGroup'=$encGr;
-    }
-    $ret = Set-JujuRelation -Settings $relation_set
-    if ($ret -eq $false){
-       Write-JujuWarning "Failed to set extra relation params"
-    }
-}
+$nova_compute = "nova-compute"
 
 function Ping-Subordonate {
-    $ready = "False"
+    $ready = $false
     $params = Get-ActiveDirectoryContext
     if ($params.Count){
         if ((Confirm-IsInDomain $params['domainName'])) {
-            $ready = "True"
+            $ready = $true
         }
     }
 
@@ -41,30 +33,37 @@ function Set-NovaUser {
     Param (
         [Parameter(Mandatory=$true)]
         [string]$Username,
-        [string]$Password,
-        [Parameter(Mandatory=$true)]
-        [string]$Domain
+        [string]$Password
     )
     $domUser = "$domain\$Username"
 
-    Grant-PrivilegesOnDomainUser -Username $Username -Domain $Domain
-    Set-ServiceLogon -Services $nova_compute -UserName $domUser -Password $Password
+    Grant-PrivilegesOnDomainUser -Username $Username
+    Set-ServiceLogon -Services $nova_compute -UserName $Username -Password $Password
     return $true
 }
 
 try {
-    $adJoinModulePath = "$psscriptroot\active-directory.psm1"
-    Import-Module -Force -DisableNameChecking $adJoinModulePath
+    Import-Module ADCharmUtils
+    Import-Module ComputeHooks
+
+    $ctx = Get-ActiveDirectoryContext
+        if(!$ctx["adcredentials"]){
+            return
+        }
 
     if((Start-JoinDomain)){
         $params = Get-ActiveDirectoryContext
-        $username = "nova-hyperv"
-        $pass = $params["my_ad_password"]
-        Set-ExtraRelationParams
+        if(!$params["adcredentials"]) {
+            return
+        }
+        Write-JujuInfo ("Creds-->: {0}" -f $params["adcredentials"])
+        $username = $params["adcredentials"][0]["username"]
+        $pass = $params["adcredentials"][0]["password"]
+
         Stop-Service $nova_compute
         Write-JujuInfo "Setting nova user"
-        Set-NovaUser -Username $username -Password $pass -Domain $params['netbiosname']
-        Start-Service $nova_compute
+        Set-NovaUser -Username $username -Password $pass
+        Start-ConfigChangedHook
         Ping-Subordonate
     }
 } catch {

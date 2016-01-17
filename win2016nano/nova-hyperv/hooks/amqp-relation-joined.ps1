@@ -4,22 +4,22 @@
 
 # we want to exit on error
 $ErrorActionPreference = "Stop"
+Import-Module JujuLoging
 
 try {
-    Import-Module -DisableNameChecking CharmHelpers
-    Import-Module -Force -DisableNameChecking "$psscriptroot\compute-hooks.psm1"
+    Import-Module JujuHooks
 
-    $rabbitUser = charm_config -scope 'rabbit-user'
-    $rabbitVhost = charm_config -scope 'rabbit-vhost'
+    $rabbitUser = Get-JujuCharmConfig -Scope 'rabbit-user'
+    $rabbitVhost = Get-JujuCharmConfig -Scope 'rabbit-vhost'
 
     $relation_set = @{
         'username'=$rabbitUser;
         'vhost'=$rabbitVhost
     }
 
-    $rids = relation_ids -reltype "amqp"
+    $rids = Get-JujuRelationIds -Relation "amqp"
     foreach ($rid in $rids){
-        $ret = relation_set -rid $rid -relation_settings $relation_set
+        $ret = Set-JujuRelation -RelationId $rid -Settings $relation_set
         if ($ret -eq $false){
            Write-JujuWarning "Failed to set amqp relation"
         }

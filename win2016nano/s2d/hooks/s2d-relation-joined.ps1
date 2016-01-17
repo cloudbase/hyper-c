@@ -2,12 +2,12 @@
 # Copyright 2014 Cloudbase Solutions SRL
 #
 $ErrorActionPreference = 'Stop'
+Import-Module JujuLoging
 
 try {
-    $modulePath = "$PSScriptRoot\hooks.psm1"
-    Import-Module -Force -DisableNameChecking $modulePath
+    Import-Module S2DHooks
 
-    Broadcast-Ready
+    Ping-S2DReady
 } catch {
     Write-HookTracebackToLog $_
     exit 1

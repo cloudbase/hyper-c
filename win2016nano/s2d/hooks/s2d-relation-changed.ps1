@@ -1,18 +1,14 @@
 #
 # Copyright 2014 Cloudbase Solutions SRL
 #
-$env:PSModulePath += "C:\Program Files\WindowsPowerShell\Modules;c:\windows\system32\windowspowershell\v1.0\Modules;$env:CHARM_DIR\lib\Modules"
-import-module Microsoft.PowerShell.Management
-import-module Microsoft.PowerShell.Utility
 # we want to exit on error
 $ErrorActionPreference = "Stop"
+Import-Module JujuLoging
 
 try {
-    Import-Module -DisableNameChecking CharmHelpers
-    $modulePath = "$PSScriptRoot\hooks.psm1"
-    Import-Module -Force -DisableNameChecking $modulePath
-
-    Run-S2DRelationChanged
+    Import-Module S2DHooks
+    
+    Start-S2DRelationChangedHook
 }catch{
     Write-HookTracebackToLog $_
     exit 1

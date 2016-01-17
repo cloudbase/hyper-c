@@ -145,6 +145,9 @@ function CreateNew-ADGroup {
     }
 
     Write-JujuInfo "Looking for $groupName"
+    if(!$groupName){
+        return $false
+    }
     try {
         $grp = Get-ADGroup -Identity $groupName
         return $grp
@@ -169,6 +172,10 @@ function AssignUserTo-Groups {
     foreach ($i in $Groups) {
         Write-JujuInfo "Assigning user $User to group $i"
         $grp = CreateNew-ADGroup $i
+        if(!$grp){
+            Write-JujuErr "Could not create group $i"
+            return $false
+        }
         Add-ADGroupMember $grp $User
     }
 }

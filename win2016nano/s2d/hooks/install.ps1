@@ -1,9 +1,10 @@
 # Copyright 2015 Cloudbase Solutions Srl
 $ErrorActionPreference = 'Stop'
+Import-Module JujuLoging
+
 
 try {
-    $modulePath = "$PSScriptRoot\hooks.psm1"
-    Import-Module -Force -DisableNameChecking $modulePath
+    Import-Module S2DHooks
 
     Clear-AllDisks
 } catch {

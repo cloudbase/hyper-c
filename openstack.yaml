@@ -138,11 +138,10 @@ maas:
       charm: local:win2016nano/nova-hyperv
       branch: lp:cloudbaseit/nova-hyperv
       options:
-        use-bonding: false
         # These are all the MAC addresses from all the nodes that are supposed to be
         # used as data ports. You can find these ports in MaaS under node details
         # Make sure you change this to match your environment.
-        data-port: "00:15:5d:00:94:1a 00:15:5d:00:94:1c 00:15:5d:00:94:16 00:15:5d:00:94:18"
+        data-port: "00:15:5D:00:DD:03 00:15:5D:00:DD:07 00:15:5D:00:DD:05 00:15:5D:00:DD:01"
         network-type: "hyperv"
         openstack-version: "liberty"
       constraints: "tags=nano"

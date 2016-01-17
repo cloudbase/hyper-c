@@ -6,6 +6,17 @@
 $ErrorActionPreference = "Stop"
 $computername = [System.Net.Dns]::GetHostName()
 Import-Module JujuLoging
+Import-Module JujuUtils
+
+function Get-AdUserAndGroup {
+    $creds = @{
+        "s2duser"=@(
+            "CN=Domain Admins,CN=Users"
+        )
+    }
+    $ret = Get-MarshaledObject $creds
+    return $ret
+}
 
 try {
     Import-Module ADCharmUtils
@@ -17,9 +28,9 @@ try {
         'computername' = $computername;
     }
 
-    $rids = relation_ids -reltype "ad-join"
+    $rids = Get-JujuRelationIds -Relation "ad-join"
     foreach ($rid in $rids){
-        $ret = relation_set -relation_id $rid -relation_settings $relation_set
+        $ret = Set-JujuRelation -RelationID $rid -Settings $relation_set
         if ($ret -eq $false){
            Write-JujuWarning "Failed to set ad-join relation"
         }

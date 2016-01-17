@@ -1,15 +1,15 @@
 #
-# Copyright 2014 Cloudbase Solutions SRL
+# Copyright 2016 Cloudbase Solutions SRL
 #
 
 # we want to exit on error
 $ErrorActionPreference = "Stop"
+Import-Module JujuLoging
 
 try {
-    Import-Module -DisableNameChecking CharmHelpers
-    Import-Module -Force -DisableNameChecking "$psscriptroot\compute-hooks.psm1"
+    Import-Module ComputeHooks
 
-    Run-ConfigChanged
+    Start-ConfigChangedHook
 } catch {
     Write-HookTracebackToLog $_
     exit 1
