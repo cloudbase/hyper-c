@@ -2,8 +2,6 @@
 # Copyright 2014 Cloudbase Solutions SRL
 #
 
-$ErrorActionPreference = "Stop"
-
 $installDir = "${env:ProgramFiles}\Cloudbase Solutions\OpenStack"
 $novaDir = Join-Path $installDir "Nova"
 
@@ -652,6 +650,15 @@ function Get-DataPortFromDataNetwork {
     if (!$dataNetwork) {
         Write-JujuInfo "os-data-network is not defined"
         return $false
+    }
+
+    # If there is any network interface configured to use DHCP and did not get an IP address
+    # we manually renew its lease and try to get an IP address before searching for the data network
+    $interfaces = Get-CimInstance -Class win32_networkadapterconfiguration | Where-Object { 
+        $_.IPEnabled -eq $true -and $_.DHCPEnabled -eq $true -and $_.DHCPServer -eq "255.255.255.255"
+    }
+    if($interfaces){
+        $interfaces.InterfaceIndex | Invoke-DHCPRenew -ErrorAction SilentlyContinue
     }
     $netDetails = $dataNetwork.Split("/")
     $decimalMask = ConvertTo-Mask $netDetails[1]
