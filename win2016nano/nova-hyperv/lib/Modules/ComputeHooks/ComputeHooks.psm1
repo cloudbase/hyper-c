@@ -433,7 +433,7 @@ function Get-NeutronContext {
     $ctx["log_dir"] = $logdir
     $ctx["vmswitch_name"] = $switchName
     $ctx["neutron_admin_auth_url"] =  "{0}://{1}:{2}/v2.0" -f @($ctx["auth_protocol"], $ctx['auth_host'], $ctx['auth_port'])
-    $ctx["local_ip"] = Get-JujuUnitPrivateIP
+    $ctx["local_ip"] = (Get-CharmState -Namespace "novahyperv" -Key "local_ip")
     return $ctx
 }
 
@@ -651,12 +651,34 @@ function Get-RealInterface {
     }
 }
 
+function Confirm-LocalIP {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$IPaddress,
+        [Parameter(Mandatory=$true)]
+        [int]$ifIndex
+    )
+    PROCESS {
+        $exists = Get-NetIPAddress -IPAddress $IPaddress -InterfaceIndex $ifIndex -ErrorAction SilentlyContinue
+        return ($exists -ne $null)
+    }
+}
+
 function Get-DataPortFromDataNetwork {
 
     $dataNetwork = Get-JujuCharmConfig -Scope "os-data-network"
     if (!$dataNetwork) {
         Write-JujuInfo "os-data-network is not defined"
         return $false
+    }
+
+    $local_ip = Get-CharmState -Namespace "novahyperv" -Key "local_ip"
+    $ifIndex = Get-CharmState -Namespace "novahyperv" -Key "dataNetworkIfindex"
+
+    if($local_ip -and $ifIndex){
+        if((Confirm-LocalIP -IPaddress $ifIndex -ifIndex $ifIndex)){
+            return Get-NetAdapter -ifindex $ifIndex
+        }
     }
 
     # If there is any network interface configured to use DHCP and did not get an IP address
@@ -679,6 +701,8 @@ function Get-DataPortFromDataNetwork {
         $network = Get-NetworkAddress $i.IPv4Address $decimalMask
         Write-JujuInfo ("Network address for {0} is {1}" -f @($i.IPAddress, $network))
         if ($network -eq $netDetails[0]){
+            Set-CharmState -Namespace "novahyperv" -Key "local_ip" -Value $i.IPAddress
+            Set-CharmState -Namespace "novahyperv" -Key "dataNetworkIfindex" -Value $i.IfIndex
             return Get-NetAdapter -ifindex $i.IfIndex
         }
     }
@@ -691,6 +715,12 @@ function Get-OVSDataPort {
         return Get-RealInterface $dataPort
     }else{
         $port = Get-FallbackNetadapter
+        $local_ip = Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex $port.IfIndex -ErrorAction SilentlyContinue
+        if(!$local_ip){
+            Throw "failed to get fallback adapter IP address"
+        }
+        Set-CharmState -Namespace "novahyperv" -Key "local_ip" -Value $local_ip[0]
+        Set-CharmState -Namespace "novahyperv" -Key "dataNetworkIfindex" -Value $port.IfIndex
     }
 
     return Get-RealInterface $port
