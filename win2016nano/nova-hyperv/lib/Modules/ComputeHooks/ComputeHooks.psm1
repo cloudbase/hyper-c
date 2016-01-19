@@ -2,8 +2,14 @@
 # Copyright 2014 Cloudbase Solutions SRL
 #
 
-$installDir = "${env:ProgramFiles}\Cloudbase Solutions\OpenStack"
-$novaDir = Join-Path $installDir "Nova"
+Import-Module JujuHelper
+Import-Module JujuHooks
+Import-Module JujuUtils
+Import-Module JujuWindowsUtils
+Import-Module Networking
+
+$installDir = "${env:ProgramFiles}\Cloudbase Solutions\OpenStack\Nova"
+$novaDir = $installDir
 
 $ovsInstallDir = "${env:ProgramFiles}\Cloudbase Solutions\Open vSwitch"
 $ovs_vsctl = Join-Path $ovsInstallDir "bin\ovs-vsctl.exe"
@@ -125,7 +131,7 @@ function Generate-ExeWrappers {
     if(!(Get-IsNanoServer)){
         return
     }
-    $pythonDir = Join-Path $novaDir "Python"
+    $pythonDir = Join-Path $novaDir "Python27"
     $python = Join-Path $pythonDir "python.exe"
     $updateWrapper = Join-Path $pythonDir "Scripts\UpdateWrappers.py"
 
@@ -212,10 +218,11 @@ function Get-CharmServices {
     $neutron_config = Join-Path $novaDir "etc\neutron_hyperv_agent.conf"
     $neutron_ml2 = Join-Path $novaDir "etc\ml2_conf.ini"
 
-    $serviceWrapper = Join-Path $novaDir "bin\OpenStackService.exe"
-    $novaExe = Join-Path $novaDir "Python\Scripts\nova-compute.exe"
-    $neutronHypervAgentExe = Join-Path $novaDir "Python\Scripts\neutron-hyperv-agent.exe"
-    $neutronOpenvswitchExe = Join-Path $novaDir "Python\Scripts\neutron-openvswitch-agent.exe"
+    $serviceWrapperNova = Join-Path $novaDir "bin\OpenStackServiceNova.exe"
+    $serviceWrapperNeutron = Join-Path $novaDir "bin\OpenStackServiceNeutron.exe"
+    $novaExe = Join-Path $novaDir "Python27\Scripts\nova-compute.exe"
+    $neutronHypervAgentExe = Join-Path $novaDir "Python27\Scripts\neutron-hyperv-agent.exe"
+    $neutronOpenvswitchExe = Join-Path $novaDir "Python27\Scripts\neutron-openvswitch-agent.exe"
 
     $JujuCharmServices = @{
         "nova"=@{
@@ -223,7 +230,7 @@ function Get-CharmServices {
             "template"="$template_dir\$distro\nova.conf";
             "service"="nova-compute";
             "binpath"="$novaExe";
-            "serviceBinPath"="`"$serviceWrapper`" nova-compute `"$novaExe`" --config-file `"$nova_config`"";
+            "serviceBinPath"="`"$serviceWrapperNova`" nova-compute `"$novaExe`" --config-file `"$nova_config`"";
             "config"="$nova_config";
             "context_generators"=@(
                 @{
@@ -257,7 +264,7 @@ function Get-CharmServices {
             "template"="$template_dir\$distro\neutron_hyperv_agent.conf"
             "service"="neutron-hyperv-agent";
             "binpath"="$neutronHypervAgentExe";
-            "serviceBinPath"="`"$serviceWrapper`" neutron-hyperv-agent `"$neutronHypervAgentExe`" --config-file `"$neutron_config`"";
+            "serviceBinPath"="`"$serviceWrapperNeutron`" neutron-hyperv-agent `"$neutronHypervAgentExe`" --config-file `"$neutron_config`"";
             "config"="$neutron_config";
             "context_generators"=@(
                 @{
@@ -287,7 +294,7 @@ function Get-CharmServices {
             "template"="$template_dir\$distro\ml2_conf.ini"
             "service"="neutron-openvswitch-agent";
             "binpath"="$neutronOpenvswitchExe";
-            "serviceBinPath"="`"$serviceWrapper`" neutron-openvswitch-agent `"$neutronOpenvswitchExe`" --config-file `"$neutron_ml2`"";
+            "serviceBinPath"="`"$serviceWrapperNeutron`" neutron-openvswitch-agent `"$neutronOpenvswitchExe`" --config-file `"$neutron_ml2`"";
             "config"="$neutron_ml2";
             "context_generators"=@(
                 @{
@@ -669,7 +676,7 @@ function Get-DataPortFromDataNetwork {
         if ($i.PrefixLength -ne $netDetails[1]){
             continue
         }
-        $network = Get-NetworkAddress $i.IPv4Address $i.PrefixLength
+        $network = Get-NetworkAddress $i.IPv4Address $decimalMask
         Write-JujuInfo ("Network address for {0} is {1}" -f @($i.IPAddress, $network))
         if ($network -eq $netDetails[0]){
             return Get-NetAdapter -ifindex $i.IfIndex
@@ -819,13 +826,11 @@ function Install-NovaFromMSI {
         $InstallerPath = Get-NovaInstaller
     }
     Write-JujuInfo "Installing from $InstallerPath"
-    $cmd = @(
-        "cmd.exe", "/C", "call",
-        "msiexec.exe", "/i",
-        $InstallerPath, "/qn",
-        "/l*v", "$env:APPDATA\log.txt",
-        "SKIPNOVACONF=1", "INSTALLDIR=$installDir")
-    Invoke-JujuCommand -Command $cmd
+    $ret = Start-Process -FilePath msiexec.exe -ArgumentList "SKIPNOVACONF=1","INSTALLDIR=`"$installDir`"","/qn","/l*v","$env:APPDATA\log.txt","/i","$InstallerPath" -Wait -PassThru
+
+    if($ret.ExitCode) {
+        Throw ("Failed to install Nova: {0}" -f $ret.ExitCode)
+    }
     return $true
 }
 
@@ -914,13 +919,10 @@ function Install-OVS {
         $InstallerPath = Get-OVSInstaller
     }
     Write-JujuInfo "Installing from $InstallerPath"
-    $cmd = @(
-        "cmd.exe", "/C", "call",
-        "msiexec.exe", "/i",
-        $InstallerPath, "/qn",
-        "/l*v", "$env:APPDATA\ovs-log.txt",
-        "INSTALLDIR=$ovsInstallDir")
-    Invoke-JujuCommand -Command $cmd
+    $ret = Start-Process -FilePath msiexec.exe -ArgumentList "INSTALLDIR=`"$ovsInstallDir`"","/qb","/l*v","$env:APPDATA\ovs-log.txt","/i","$InstallerPath" -Wait -PassThru
+    if($ret.ExitCode) {
+        Throw "Failed to install OVS: $LASTEXITCODE"
+    }
     return $true
 }
 
@@ -1129,5 +1131,4 @@ function Start-InstallHook {
     }    
 }
 
-
-Export-ModuleMember -Function * -Variable JujuCharmServices
+Export-ModuleMember -Function "Start-ConfigChangedHook","Start-InstallHook","Restart-Nova","Restart-Neutron","Stop-Neutron" -Variable JujuCharmServices

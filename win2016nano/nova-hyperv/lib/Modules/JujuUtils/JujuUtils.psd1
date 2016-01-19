@@ -46,7 +46,7 @@ Description = 'Helper module for Juju Charms'
 PowerShellVersion = '3.0'
 
 # Modules that must be imported into the global environment prior to importing this module
-RequiredModules = @("JujuLoging")
+# RequiredModules = @("JujuLoging")
 
 # Functions to export from this module
 FunctionsToExport = @(
@@ -63,7 +63,6 @@ FunctionsToExport = @(
     "Compare-HashTables",
     "Start-ExternalCommand",
     "Start-ExecuteWithRetry",
-    "Test-FileIntegrity",
     "Get-SanePath",
     "Add-ToUserPath",
     "Get-MarshaledObject",

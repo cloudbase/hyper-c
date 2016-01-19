@@ -28,7 +28,7 @@ RootModule = 'ComputeHooks.psm1'
 ModuleVersion = '0.1'
 
 # ID used to uniquely identify this module
-GUID = 'f48652df-b026-479d-a9c3-8758702f843a'
+GUID = 'bf61935a-5ea8-4ebf-aedc-e4ff745b6346'
 
 # Author of this module
 Author = "Gabriel Adrian Samfira"

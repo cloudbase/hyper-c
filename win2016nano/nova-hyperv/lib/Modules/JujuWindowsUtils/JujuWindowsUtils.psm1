@@ -12,6 +12,11 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+Import-Module JujuHelper
+Import-Module JujuLoging
+Import-Module JujuHooks
+Import-Module JujuUtils
+
 $moduleHome = Split-Path -Parent $MyInvocation.MyCommand.Path
 $administratorsGroupSID = "S-1-5-32-544"
 $computername = [System.Net.Dns]::GetHostName()

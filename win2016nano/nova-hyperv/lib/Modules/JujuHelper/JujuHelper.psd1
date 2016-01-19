@@ -45,10 +45,13 @@ Description = 'Helper module for Juju Charms'
 # Minimum version of the Windows PowerShell engine required by this module
 PowerShellVersion = '3.0'
 
+# RequiredModules = @("Microsoft.Powershell.Utility")
+
 # Functions to export from this module
 FunctionsToExport = @(
     "Invoke-JujuCommand",
     "Invoke-FastWebRequest",
+    "Test-FileIntegrity",
     "Get-RandomString")
 
 # Cmdlets to export from this module

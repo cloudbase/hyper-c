@@ -12,6 +12,9 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+Import-Module powershell-yaml
+Import-Module JujuHelper
+Import-Module JujuLoging
 
 function Get-StateInformationRepository {
     <#
@@ -556,7 +559,6 @@ function Get-JujuRelationContext {
         $relData = Get-JujuRelationsOfType -Relation $Relation
         foreach($r in $relData) {
             $ctx = @{}
-            Write-JujuInfo ("Got keys from relation: {0}" -f ($r.Keys -Join " "))
             foreach($i in $RequiredContext.Keys){
                 $ctx[$i] = $r[$i]
             }

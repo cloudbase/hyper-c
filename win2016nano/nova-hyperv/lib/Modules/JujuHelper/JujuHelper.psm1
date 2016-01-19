@@ -12,6 +12,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+Import-Module Microsoft.Powershell.Utility
+
 $version = $PSVersionTable.PSVersion.Major
 if ($version -lt 4){
     # Get-CimInstance is not supported on powershell versions earlier then 4
@@ -57,6 +59,26 @@ function Invoke-JujuCommand {
             return $ret
         }
         return $false
+    }
+}
+
+function Test-FileIntegrity {
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$true, ValueFromPipeline=$true, Position=0)]
+        [string]$File,
+        [Parameter(Mandatory=$true)]
+        [string]$ExpectedHash,
+        [Parameter(Mandatory=$false)]
+        [ValidateSet("SHA1", "SHA256", "SHA384", "SHA512", "MACTripleDES", "MD5", "RIPEMD160")]
+        [string]$Algorithm="SHA1"
+    )
+    PROCESS {
+        $hash = (Get-FileHash -Path $File -Algorithm $Algorithm).Hash
+        if ($hash -ne $ExpectedHash) {
+            throw ("File integrity check failed for {0}. Expected {1}, got {2}" -f @($File, $ExpectedHash, $hash))
+        }
+        return $true
     }
 }
 
@@ -141,24 +163,23 @@ function Invoke-FastWebRequest {
                     Write-Progress -Activity "Downloading: $Uri" -PercentComplete $percComplete
                 }
             }
-
-            if(!$SkipIntegrityCheck) {
-                $fragment = $Uri.Fragment.Trim('#')
-                if (!$fragment){
-                    return
-                }
-                $details = $fragment.Split("=")
-                $algorithm = $details[0]
-                $hash = $details[1]
-                if($algorithm -in @("SHA1", "SHA256", "SHA384", "SHA512", "MACTripleDES", "MD5", "RIPEMD160")){
-                    Test-FileIntegrity -File $OutFile -Algorithm $algorithm -ExpectedHash $hash
-                } else {
-                    Write-JujuWarning "Hash algorithm $algorithm not recognized. Skipping file integrity check."
-                }
-            }
         }
         finally {
             $outStream.Close()
+        }
+        if(!$SkipIntegrityCheck) {
+            $fragment = $Uri.Fragment.Trim('#')
+            if (!$fragment){
+                return
+            }
+            $details = $fragment.Split("=")
+            $algorithm = $details[0]
+            $hash = $details[1]
+            if($algorithm -in @("SHA1", "SHA256", "SHA384", "SHA512", "MACTripleDES", "MD5", "RIPEMD160")){
+                Test-FileIntegrity -File $OutFile -Algorithm $algorithm -ExpectedHash $hash
+            } else {
+                Throw "Hash algorithm $algorithm not recognized."
+            }
         }
     }
 }

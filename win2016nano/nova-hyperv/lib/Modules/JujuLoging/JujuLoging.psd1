@@ -46,7 +46,7 @@ Description = 'Helper module for Juju Charms'
 PowerShellVersion = '3.0'
 
 # Modules that must be imported into the global environment prior to importing this module
-RequiredModules = @("JujuHelper")
+# RequiredModules = @("JujuHelper")
 
 # Functions to export from this module
 FunctionsToExport = "*"
