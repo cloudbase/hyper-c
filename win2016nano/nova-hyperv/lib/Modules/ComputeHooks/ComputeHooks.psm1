@@ -370,16 +370,12 @@ function Get-NeutronUrl {
 
 function Get-S2DContainerContext {
     $instancesDir = (Get-JujuCharmConfig -Scope 'instances-dir').Replace('/', '\')
-    $ctx = @{
-        "instances_dir"=$instancesDir;
-    }
 
     $required = @{
         "s2dvolpath"=$null;
     }
 
     $ctx = Get-JujuRelationContext -Relation "s2d" -RequiredContext $required
-    $ctx["instances_dir"] = $instancesDir
     if($ctx.Count){
         if($ctx["s2dvolpath"] -and (Test-Path $ctx["s2dvolpath"])){
             $ctx["instances_dir"] = $ctx["s2dvolpath"]
@@ -387,6 +383,7 @@ function Get-S2DContainerContext {
         }
         Write-JujuWarning "Relation information states that an s2d volume should be present, but could not be found locally."
     }
+    $ctx["instances_dir"] = $instancesDir
     # If we get here, it means there was no s2dvolpath
     if (!(Test-Path $ctx["instances_dir"])){
         mkdir $ctx["instances_dir"]
