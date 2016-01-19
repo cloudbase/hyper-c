@@ -841,7 +841,7 @@ function Get-NovaInstaller {
     }else {
         $url = $installer_url
     }
-    $location = Download-File $url
+    [string]$location = Download-File $url
     return $location
 }
 
