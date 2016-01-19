@@ -477,7 +477,7 @@ function Get-CharmConfigContext {
 
 function Get-SystemContext {
     $asHash = @{
-        "nova_dir" = $novaDir;
+        "installDir" = $installDir;
         "force_config_drive" = "False";
         "config_drive_inject_password" = "False";
         "config_drive_cdrom" = "False";
