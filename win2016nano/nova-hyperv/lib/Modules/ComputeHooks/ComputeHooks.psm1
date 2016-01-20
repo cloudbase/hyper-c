@@ -40,7 +40,7 @@ $distro_urls = @{
     };
     'liberty' = @{
         "installer" = @{
-            'msi' = 'https://www.cloudbase.it/downloads/HyperVNovaCompute_Beta.msi';
+            'msi' = 'https://cloudbase.it/downloads/HyperVNovaCompute_Liberty_12_0_0.msi#md5=71b77c82dd7990891e108a98a1ecd234';
             'zip' = 'https://www.cloudbase.it/downloads/HyperVNovaCompute_Liberty_12_0_0.zip';
         };
         "ovs" = $true;
@@ -370,6 +370,9 @@ function Get-NeutronUrl {
 
 function Get-S2DContainerContext {
     $instancesDir = (Get-JujuCharmConfig -Scope 'instances-dir').Replace('/', '\')
+    $ctx = @{
+        "instances_dir"=$instancesDir;
+    }
 
     $required = @{
         "s2dvolpath"=$null;
