@@ -926,9 +926,9 @@ function Get-OVSInstaller {
 }
 
 function Ensure-InternalOVSInterfaces {
-    Invoke-JujuCommand -Command @($ovs_vsctl, "--may-exist", "add-br", "br-tun")
-    Invoke-JujuCommand -Command @($ovs_vsctl, "--may-exist", "add-port", "br-tun", "external.1")
-    Invoke-JujuCommand -Command @($ovs_vsctl, "--may-exist", "add-port", "br-tun", "internal")
+    Invoke-JujuCommand -Command @($ovs_vsctl, "--may-exist", "add-br", "juju-br")
+    Invoke-JujuCommand -Command @($ovs_vsctl, "--may-exist", "add-port", "juju-br", "external.1")
+    Invoke-JujuCommand -Command @($ovs_vsctl, "--may-exist", "add-port", "juju-br", "internal")
 }
 
 function Install-OVS {
