@@ -127,11 +127,22 @@ function WaitFor-BondUp {
     return $false
 }
 
+function Get-PythonDir {
+    $pythonDir = Join-Path $novaDir "Python27"
+    if(!(Test-Path $pythonDir)){
+        $pythonDir = Join-Path $novaDir "Python"
+        if(!(Test-Path $pythonDir)) {
+            Throw "Could not find python directory"
+        }
+    }
+    return $pythonDir
+}
+
 function Generate-ExeWrappers {
     if(!(Get-IsNanoServer)){
         return
     }
-    $pythonDir = Join-Path $novaDir "Python27"
+    $pythonDir = Get-PythonDir
     $python = Join-Path $pythonDir "python.exe"
     $updateWrapper = Join-Path $pythonDir "Scripts\UpdateWrappers.py"
 
@@ -218,11 +229,13 @@ function Get-CharmServices {
     $neutron_config = Join-Path $novaDir "etc\neutron_hyperv_agent.conf"
     $neutron_ml2 = Join-Path $novaDir "etc\ml2_conf.ini"
 
+    $pythonDir = Get-PythonDir
+
     $serviceWrapperNova = Join-Path $novaDir "bin\OpenStackServiceNova.exe"
     $serviceWrapperNeutron = Join-Path $novaDir "bin\OpenStackServiceNeutron.exe"
-    $novaExe = Join-Path $novaDir "Python27\Scripts\nova-compute.exe"
-    $neutronHypervAgentExe = Join-Path $novaDir "Python27\Scripts\neutron-hyperv-agent.exe"
-    $neutronOpenvswitchExe = Join-Path $novaDir "Python27\Scripts\neutron-openvswitch-agent.exe"
+    $novaExe = Join-Path $pythonDir "Scripts\nova-compute.exe"
+    $neutronHypervAgentExe = Join-Path $pythonDir "Scripts\neutron-hyperv-agent.exe"
+    $neutronOpenvswitchExe = Join-Path $pythonDir "Scripts\neutron-openvswitch-agent.exe"
 
     $JujuCharmServices = @{
         "nova"=@{
