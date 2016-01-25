@@ -11,7 +11,9 @@ Import-Module -Force -DisableNameChecking CharmHelpers
 $computername = [System.Net.Dns]::GetHostName()
 
 function Clear-AllDisks {
-    Clear-Disk -Number 1 -RemoveOEM -Confirm:$false
+    Get-Disk | Where-Object {
+        $_.IsBoot -eq $false -and $_.IsSystem -eq $false
+    } | Clear-Disk -RemoveData -RemoveOEM -Confirm:$false -ErrorAction SilentlyContinue
 }
 
 function Run-S2DRelationChanged {
