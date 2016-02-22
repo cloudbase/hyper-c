@@ -126,7 +126,7 @@ SWIFT_CODENAMES = OrderedDict([
 # >= Liberty version->codename mapping
 PACKAGE_CODENAMES = {
     'nova-common': OrderedDict([
-        ('12.0.0', 'liberty'),
+        ('12.0.1', 'liberty'),
     ]),
     'neutron-common': OrderedDict([
         ('7.0.0', 'liberty'),

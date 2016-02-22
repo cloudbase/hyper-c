@@ -139,7 +139,7 @@ PACKAGE_CODENAMES = {
         ('8.0.0', 'liberty'),
     ]),
     'horizon-common': OrderedDict([
-        ('8.0.0', 'liberty'),
+        ('8.0.1', 'liberty'),
     ]),
     'ceilometer-common': OrderedDict([
         ('5.0.0', 'liberty'),
@@ -151,7 +151,7 @@ PACKAGE_CODENAMES = {
         ('11.0.0', 'liberty'),
     ]),
     'openstack-dashboard': OrderedDict([
-        ('8.0.0', 'liberty'),
+        ('8.0.1', 'liberty'),
     ]),
 }
 

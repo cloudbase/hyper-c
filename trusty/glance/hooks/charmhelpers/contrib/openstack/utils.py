@@ -147,7 +147,7 @@ PACKAGE_CODENAMES = {
         ('5.0.0', 'liberty'),
     ]),
     'glance-common': OrderedDict([
-        ('11.0.0', 'liberty'),
+        ('11.0.1', 'liberty'),
     ]),
     'openstack-dashboard': OrderedDict([
         ('8.0.0', 'liberty'),

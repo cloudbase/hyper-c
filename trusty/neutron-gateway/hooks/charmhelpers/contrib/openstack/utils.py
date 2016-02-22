@@ -129,7 +129,7 @@ PACKAGE_CODENAMES = {
         ('12.0.0', 'liberty'),
     ]),
     'neutron-common': OrderedDict([
-        ('7.0.0', 'liberty'),
+        ('7.0.1', 'liberty'),
     ]),
     'cinder-common': OrderedDict([
         ('7.0.0', 'liberty'),
