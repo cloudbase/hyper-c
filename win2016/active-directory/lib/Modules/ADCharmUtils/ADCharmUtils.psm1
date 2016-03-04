@@ -185,3 +185,5 @@ function Disconnect-FromADDomain {
 New-Alias -Name ConnectTo-ADController -Value Connect-ToADController
 New-Alias -name Is-InDomain -Value Confirm-IsInDomain
 New-Alias -Name Leave-ADDomain -Value Disconnect-FromADDomain
+
+Export-ModuleMember -Function * -Alias *

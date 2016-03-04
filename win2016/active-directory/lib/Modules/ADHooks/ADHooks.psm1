@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 $computername = [System.Net.Dns]::GetHostName()
 
 # Charm Helpers
-Import-Module JujuLoging
+Import-Module JujuLogging
 Import-Module JujuHooks
 Import-Module JujuUtils
 Import-Module JujuWindowsUtils
@@ -81,6 +81,9 @@ function GetOrCreate-ADUser {
     if ($usr) {
         $cachedPass = GetBlob-FromLeader -Name $keyName
         if(!$cachedPass){
+#            $cachedPass = Get-RandomString -Weak
+#            Set-ADAccountPassword -Identity $Username -Reset -NewPassword (ConvertTo-SecureString -AsPlainText $cachedPass -Force)
+#            SetBlob-ToLeader -Name $keyName -Blob $cachedPass
             Throw "Failed to get cached password for user $Username"
         }
         return @($usr, $cachedPass)
@@ -821,8 +824,8 @@ function Win-Peer {
         Write-JujuLog "This machine is not yet AD Controller."
         $ADParams = Get-RelationParams 'add-controller'
         if ($ADParams) {
-            if((Get-CharmState "ADController" "IsInstalled") -ne "True") {
-                Set-CharmState "AD" "InstallingSlave" "True"
+            if(!(Get-CharmState "ADController" "IsInstalled")) {
+                Set-CharmState "AD" "InstallingSlave" $true 
                 Main-Slave $ADParams
             } else {
                 $dns = Get-PrimaryAdapterDNSServers

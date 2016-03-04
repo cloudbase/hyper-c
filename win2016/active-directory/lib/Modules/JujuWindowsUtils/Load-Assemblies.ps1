@@ -14,7 +14,7 @@
 #
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$libDir = Join-Path $here "lib"
+$libDir = Join-Path $here "Lib"
 
 function ServerLevelKey {
     <#
@@ -44,17 +44,12 @@ function IsNanoServer {
 
 function Initialize-Assemblies {
     $isNano = IsNanoServer
-    $assemblyDir = Join-Path $libDir "net35"
-    if($isNano){
-        # Load the portable assembly
-        $assemblyDir = Join-Path $libDir "net45"
-    }
-    $assemblyFile = Join-Path $assemblyDir "YamlDotNet.dll"
+    $assemblyFile = Join-Path $libDir "Cloudbase.PSUtils.dll"
     try {
-        [YamlDotNet.Serialization.Serializer] | Out-Null
+        [Cloudbase.PSUtils.ProcessManager] | Out-Null
     } catch [System.Management.Automation.RuntimeException] {
         if(!(Test-Path $assemblyFile)) {
-            Throw "Could not find YamlDotNet assembly on the system"
+            Throw "Could not find assembly on the system"
         }
         if($isNano){
             return [Microsoft.PowerShell.CoreCLR.AssemblyExtensions]::LoadFrom($assemblyFile)

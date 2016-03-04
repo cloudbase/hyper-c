@@ -54,7 +54,7 @@ AliasesToExport = '*'
 
 RequiredModules = @(
     "JujuWindowsUtils",
-    "JujuLoging",
+    "JujuLogging",
     "JujuHooks",
     "JujuUtils",
     "ADCharmUtils")

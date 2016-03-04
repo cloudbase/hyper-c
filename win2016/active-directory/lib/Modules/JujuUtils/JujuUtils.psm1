@@ -12,6 +12,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+Import-Module JujuLogging
+
 function Convert-FileToBase64{
     <#
     .SYNOPSIS
@@ -350,26 +352,6 @@ function Start-ExecuteWithRetry {
     }
 }
 
-function Test-FileIntegrity {
-    [CmdletBinding()]
-    Param(
-        [Parameter(Mandatory=$true, ValueFromPipeline=$true, Position=0)]
-        [string]$File,
-        [Parameter(Mandatory=$true)]
-        [string]$ExpectedHash,
-        [Parameter(Mandatory=$false)]
-        [ValidateSet("SHA1", "SHA256", "SHA384", "SHA512", "MACTripleDES", "MD5", "RIPEMD160")]
-        [string]$Algorithm="SHA1"
-    )
-    PROCESS {
-        $hash = (Get-FileHash -Path $File -Algorithm $Algorithm).Hash
-        if ($hash -ne $ExpectedHash) {
-            throw ("File integrity check failed for {0}. Expected {1}, got {2}" -f @($File, $ExpectedHash, $hash))
-        }
-        return $true
-    }
-}
-
 function Get-SanePath {
     <#
     .SYNOPSIS
@@ -535,29 +517,4 @@ function Get-PSStringParamsFromHashtable {
     }
 }
 
-function Get-RandomString {
-    <#
-    .SYNOPSIS
-    Returns a random string of characters, suitable for passwords
-    .PARAMETER Length
-    length of the random string.
-    #>
-    [CmdletBinding()]
-    Param(
-        [int]$Length=16,
-        [switch]$Weak=$false
-    )
-    PROCESS {
-        if(!$Weak) {
-            $characters = 33..122
-        }else {
-            $characters = (48..57) + (65..90) + (97..122) + @(64,61,35)
-        }
-        $passwd = ""
-        for($i=0; $i -lt $Length; $i++){
-        $c = get-random -input $characters
-        $passwd += [char]$c
-        }
-        return $passwd
-    }
-}
+Export-ModuleMember -Function * -Alias *

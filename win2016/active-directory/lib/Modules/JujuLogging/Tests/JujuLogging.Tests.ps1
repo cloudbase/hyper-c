@@ -9,7 +9,7 @@ if(!($moduleRoot -in $modulePath)){
 
 $savedEnv = [System.Environment]::GetEnvironmentVariables()
 
-Import-Module JujuLoging
+Import-Module JujuLogging
 
 function Clear-Environment {
     $current = [System.Environment]::GetEnvironmentVariables()
@@ -41,10 +41,10 @@ Describe "Test Get-CallStack" {
 }
 
 Describe "Test Write-HookTracebackToLog" {
-    Mock Get-CallStack -Verifiable -ModuleName JujuLoging {
+    Mock Get-CallStack -Verifiable -ModuleName JujuLogging {
         return @("first", "second", "third")
     }
-    Mock Write-JujuLog -Verifiable -ModuleName JujuLoging {
+    Mock Write-JujuLog -Verifiable -ModuleName JujuLogging {
         Param(
             [Parameter(Mandatory=$true)]
             [string]$Message,
@@ -59,7 +59,7 @@ Describe "Test Write-HookTracebackToLog" {
         $err = $null
         try { nonexistingcommand } catch { $err = $_ }
         Write-HookTracebackToLog  -ErrorRecord $err -LogLevel "ERROR"
-        Assert-MockCalled Write-JujuLog -Times 4 -ModuleName JujuLoging
-        Assert-MockCalled Get-CallStack -Times 1 -ModuleName JujuLoging
+        Assert-MockCalled Write-JujuLog -Times 4 -ModuleName JujuLogging
+        Assert-MockCalled Get-CallStack -Times 1 -ModuleName JujuLogging
     }
 }
