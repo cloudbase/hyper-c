@@ -23,6 +23,13 @@ $WINDOWS_FEATURES = @( 'AD-Domain-Services',
 
 $ADUserSection = "ADCharmUsers"
 
+function Set-RequiredPrivileges {
+    $me = whoami
+    Grant-Privilege -User $me -Grant SeBatchLogonRight
+    Grant-Privilege -User $me -Grant SeServiceLogonRight
+    Grant-Privilege -User $me -Grant SeAssignPrimaryTokenPrivilege
+}
+
 
 function Start-TimeResync {
     Write-JujuInfo "Synchronizing time..."
@@ -50,7 +57,7 @@ function CreateNew-ADUser {
     if (!$dn) {
         Throw "Could not get DistinguishedName."
     }
-    $passwd = Get-RandomString -Length 20 -Weak
+    $passwd = Get-RandomString -Length 10 -Weak
     $secPass = ConvertTo-SecureString -AsPlainText $passwd -Force
     $adPath = "CN=Users," + $dn
 
@@ -320,10 +327,10 @@ function Create-ServicesUsers {
     Write-JujuInfo "Creating AD Users for active-directory DC"
 
     $machineName = $computername
-    $domain = Get-DomainName $ADparams["ad_domain"]
-    $adminUsername = $ADparams["ad_username"]
-    $adminPassword = $ADparams["ad_password"]
-    $dcName = $ADparams["ad_hostname"]
+    $domain = Get-DomainName $ADparams['domainName']
+    $adminUsername = $ADparams["username"]
+    $adminPassword = $ADparams["password"]
+    $dcName = $ADparams["private-address"]
     $administratorsGroupSID = "S-1-5-32-544"
     $isLocalAdmin = Get-UserGroupMembership -Username $adminUsername -GroupSID $administratorsGroupSID
     $administratorsGroupName = Get-GroupNameFromSID -SID $administratorsGroupSID
@@ -399,8 +406,25 @@ function Get-ADRelationMap {
         "ad_hostname" = "hostname";
         "ad_username" = "username";
         "ad_password" = "password";
-        "ad_domain" = "domainName";
+        'ad_domain' = "domainName";
     }
+}
+
+function Get-PeerContext {
+    $required = @{
+        "private-address"=$null;
+        "address"=$null;
+        "hostname"=$null;
+        "username"=$null;
+        "password"=$null;
+        "domainName"=$null;
+    }
+
+    $ctx = Get-JujuRelationContext -RequiredContext $required -Relation "add-controller"
+    if(!$ctx.Count) {
+        return @{}
+    }
+    return $ctx
 }
 
 function Get-RelationParams {
@@ -443,6 +467,7 @@ function Prepare-ADInstall {
     $netbiosName = Convert-JujuUnitNameToNetbios
     $shouldReboot = $false
     if ($computername -ne $netbiosName) {
+        Write-JujuWarning ("Changing computername from {0} to {1}" -f @($computername, $netbiosName))
         Rename-Computer -NewName $netbiosName
         $shouldReboot = $true
     }
@@ -518,7 +543,7 @@ function Install-ADForest {
     if (!$forestInstalled) {
         return
     }
-    Set-CharmState -Namespace "ADController" -Key "IsInstalled" -Value "True"
+    Set-CharmState -Namespace "ADController" -Key "IsInstalled" -Value $true
     Write-JujuLog "Finished installing Forest..."
     Invoke-JujuReboot -Now
 }
@@ -534,8 +559,10 @@ function Add-DNSForwarders {
 
     Start-ExecuteWithRetry {
         $hostname = $computername
-        $cmd = @("dnscmd.exe", $hostname, "/resetforwarders", $nameservers)
-        Invoke-JujuCommand -Command $cmd | Out-Null
+        foreach($i in $nameservers) {
+            $cmd = @("dnscmd.exe", $hostname, "/resetforwarders", $i)
+            Invoke-JujuCommand -Command $cmd | Out-Null
+        }
     } -MaxRetryCount 3 -RetryInterval 30
 }
 
@@ -547,18 +574,18 @@ function Main-Slave {
     )
     PROCESS {
         Write-JujuLog "Executing main slave..."
-        if (!(Is-InDomain $ADParams['ad_domain'])) {
+        if (!(Is-InDomain $ADParams['domainName'])) {
             ConnectTo-ADController $ADParams
             Invoke-JujuReboot -Now
         }
-        $domain = Get-DomainName $ADParams["ad_domain"]
+        $domain = Get-DomainName $ADParams['domainName']
 
         $safeModePassword = Get-JujuCharmConfig -Scope "safe-mode-password"
         $safeModePasswordSecure = ConvertTo-SecureString $safeModePassword -AsPlainText -Force
 
         $adminPassword = Get-JujuCharmConfig -Scope "default-administrator-password"
         $dcsecpassword = ConvertTo-SecureString $adminPassword -AsPlainText -Force
-        $domain = Get-DomainName $ADParams["ad_domain"]
+        $domain = Get-DomainName $ADParams['domainName']
         $adminUsername = Get-AdministratorAccount
         $adCredential = New-Object System.Management.Automation.PSCredential("$domain\$adminUsername", $dcsecpassword)
 
@@ -570,7 +597,7 @@ function Main-Slave {
                 -SafeModeAdministratorPassword:$safeModePasswordSecure `
                 -NoRebootOnCompletion:$true -Credential $adCredential -Force
         } -MaxRetryCount 3 -RetryInterval 30
-        Set-CharmState "ADController" "IsInstalled" "True"
+        Set-CharmState -Namespace "ADController" -Key "IsInstalled" -Value $true
 
         Invoke-JujuReboot -Now
     }
@@ -582,7 +609,7 @@ function Is-DomainInstalled {
         [string]$fullDomainName
     )
 
-    $isAdControllerInstalled = (Get-CharmState "ADController" "IsInstalled") -eq "True"
+    $isAdControllerInstalled = (Get-CharmState -Namespace "ADController" -Key "IsInstalled")
     if (!$isAdControllerInstalled) {
         return $false
     }
@@ -749,7 +776,7 @@ function Import-Certificate {
         Throw "$cert_file or $key_file not found"
     }
 
-    $password = Get-RandomString -Length 15 -Weak
+    $password = Get-RandomString -Length 10 -Weak
     # Import server certificate
     $pfx = Join-Path $env:TEMP cert.pfx
     if((Test-Path $pfx)){
@@ -818,14 +845,14 @@ function Set-Availability {
 
 function Win-Peer {
     Write-JujuLog "Running peer relation..."
-    $resumeInstall = (Get-CharmState "AD" "InstallingSlave") -eq "True"
+    $resumeInstall = (Get-CharmState -Namespace "AD" -Key "InstallingSlave")
     $fullDomainName = Get-JujuCharmConfig -Scope 'domain-name'
     if (!(Is-DomainInstalled $fullDomainName) -or $resumeInstall) {
         Write-JujuLog "This machine is not yet AD Controller."
-        $ADParams = Get-RelationParams 'add-controller'
-        if ($ADParams) {
-            if(!(Get-CharmState "ADController" "IsInstalled")) {
-                Set-CharmState "AD" "InstallingSlave" $true 
+        $ADParams = Get-PeerContext
+        if ($ADParams.Count) {
+            if(!(Get-CharmState -Namespace "ADController" -Key "IsInstalled")) {
+                Set-CharmState -Namespace "AD" -Key "InstallingSlave" -Value $true 
                 Main-Slave $ADParams
             } else {
                 $dns = Get-PrimaryAdapterDNSServers
@@ -837,11 +864,11 @@ function Win-Peer {
                             -ServerAddresses $dns
                     }
                 }
-                Set-CharmState "AD" "InstallingSlave" "False"
+                Set-CharmState -Namespace "AD" -Key "InstallingSlave" -Value $false
             }
         }
     }
-    if ((Get-CharmState "AD" "RunningLeaderElectedHook") -eq "True") {
+    if ((Get-CharmState -Namespace "AD" -Key "RunningLeaderElectedHook")) {
         $peerRelationsNotSet = $true
     }
     $isDomainInstalled = Is-DomainInstalled $fullDomainName
@@ -849,7 +876,7 @@ function Win-Peer {
         Write-JujuInfo "Setting relations..."
         Set-Availability 'add-controller'
         Set-Availability 'ad-join'
-        Set-CharmState "AD" "RunningLeaderElectedHook" "False"
+        Set-CharmState -Namespace "AD" -Key "RunningLeaderElectedHook" -Value $false
     }
 
     if ($isDomainInstalled) {
@@ -934,14 +961,14 @@ function Destroy-ADDomain {
     Start-ExecuteWithRetry -Command {
         Uninstall-ActiveDomainController
     } -MaxRetryCount 3 -RetryInterval 30
-    Set-CharmState "ADController" "IsInstalled" "False"
+    Set-CharmState -Namespace "ADController" -Key "IsInstalled" -Value $false
     Invoke-JujuReboot -Now
 }
 
 function Install-Certificate {
     Write-JujuLog "Installing certificate..."
 
-    if ((Get-CharmState "AD" "CertificateInstalled") -eq "True") {
+    if ((Get-CharmState -Namespace "AD" -Key "CertificateInstalled")) {
         Write-JujuLog "Certificate already installed. Skipping..."
         return $false
     }
@@ -971,7 +998,7 @@ function Install-Certificate {
     $certificateFile = Create-CA
     Import-CA -ca $certificateFile.ca
     Import-Certificate -cert $certificateFile.cert -key $certificateFile.key
-    Set-CharmState "AD" "CertificateInstalled" "True"
+    Set-CharmState -Namespace "AD" -Key "CertificateInstalled" -Value $true
     Write-JujuLog "Finished installing certificate."
     return $true
 }
@@ -1041,8 +1068,9 @@ function SetBlob-ToLeader {
         [Parameter(Mandatory=$true)]
         [string]$Blob
     )
-
-    Set-LeaderData @{$Name=$Blob;}
+    if((Confirm-Leader)) {
+        Set-LeaderData @{$Name=$Blob;}
+    }
 }
 
 function RemoveBlob-FromLeader {
@@ -1050,7 +1078,9 @@ function RemoveBlob-FromLeader {
         [Parameter(Mandatory=$true)]
         [string]$Name
     )
-    Set-LeaderData @{$Name="Nil";}
+    if((Confirm-Leader)) {
+        Set-LeaderData @{$Name="Nil";}
+    }
 }
 
 function Create-DjoinData {
@@ -1222,13 +1252,13 @@ function Start-LeaderElectedHook {
         Write-JujuLog "This unit is the first or former leader"
         $isFormerLeader = $true
     }
-    $alreadyRunningLeaderElected = (Get-CharmState "AD" "RunningLeaderElectedHook") -eq "True"
+    $alreadyRunningLeaderElected = (Get-CharmState -Namespace "AD" -Key "RunningLeaderElectedHook")
     if ($isLeader) {
         Set-LeaderData @{"active-leader"=($computername);}
     }
     if (($isLeader -and $isFormerLeader) -or $alreadyRunningLeaderElected) {
         Write-JujuLog "Resuming hook run."
-        Set-CharmState "AD" "RunningLeaderElectedHook" "True"
+        Set-CharmState -Namespace "AD" -Key "RunningLeaderElectedHook" -Value $true
         Start-ExecuteWithRetry {
             Install-ADForest
         } -MaxRetryCount 30 -RetryInterval 30

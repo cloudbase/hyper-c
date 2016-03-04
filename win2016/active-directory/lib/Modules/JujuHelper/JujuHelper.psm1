@@ -199,6 +199,9 @@ function Get-RandomString {
         [switch]$Weak=$false
     )
     PROCESS {
+        if($length -ge 4) {
+            $Length = $Length - 4
+        }
         if(!$Weak) {
             $characters = 33..122
         }else {
@@ -206,9 +209,10 @@ function Get-RandomString {
         }
         $passwd = ""
         for($i=0; $i -lt $Length; $i++){
-        $c = get-random -input $characters
-        $passwd += [char]$c
+            $c = get-random -input $characters
+            $passwd += [char]$c
         }
+        $passwd += "aA9@"
         return $passwd
     }
 }

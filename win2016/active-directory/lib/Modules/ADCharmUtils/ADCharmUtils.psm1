@@ -1,6 +1,7 @@
 #
 # Copyright 2014-2015 Cloudbase Solutions Srl
 #
+$computername = [System.Net.Dns]::GetHostName()
 
 function Set-UserRunAsRights {
     Param
@@ -56,15 +57,15 @@ function Connect-ToADController {
         Invoke-JujuReboot -Now
     }
 
-    $localAdminPassword = Get-RandomString -Length 20 -Weak
+    $localAdminPassword = Get-RandomString -Length 10 -Weak
     New-LocalAdmin $localAdminUsername $localAdminPassword
     $passwordSecure = ConvertTo-SecureString -String $localAdminPassword -AsPlainText -Force
     $localCredential = New-Object PSCredential($localAdminUsername, $passwordSecure)
     $adCredential = Get-ADCredential $ADParams
     $networkName = Get-MainNetadapter
     Start-ExecuteWithRetry -Command {
-        Join-Domain $ADParams["ad_domain"] `
-                    $ADParams["ip_address"] `
+        Join-Domain $ADParams["domainName"] `
+                    $ADParams["private-address"] `
                     $localCredential `
                     $adCredential `
                     $networkName
@@ -118,12 +119,12 @@ function Get-DomainName {
 function Get-ADCredential {
     param(
         [Parameter(Mandatory=$true)]
-        $ADParams
+        [hashtable]$ADParams
     )
 
-    $adminUsername = $ADParams["ad_username"]
-    $adminPassword = $ADParams["ad_password"]
-    $domain = $ADParams["ad_domain"]
+    $adminUsername = $ADParams["username"]
+    $adminPassword = $ADParams["password"]
+    $domain = $ADParams["domainName"]
     $passwordSecure = ConvertTo-SecureString $adminPassword -AsPlainText -Force
     $adCredential = New-Object PSCredential("$adminUsername@$domain",
                                              $passwordSecure)
@@ -162,7 +163,7 @@ function Disconnect-FromADDomain {
 
     Write-JujuLog "Leaving AD domain..."
 
-    $localAdminPassword = Get-RandomString -Length 20 -Weak
+    $localAdminPassword = Get-RandomString -Length 10 -Weak
     $localAdminUsername = "adminlocal"
     New-LocalAdmin $localAdminUsername $localAdminPassword
     $passwordSecure = ConvertTo-SecureString -String $localAdminPassword -asPlainText -Force
