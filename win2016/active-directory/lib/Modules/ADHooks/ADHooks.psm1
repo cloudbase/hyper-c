@@ -576,6 +576,10 @@ function Main-Slave {
         Write-JujuLog "Executing main slave..."
         if (!(Is-InDomain $ADParams['domainName'])) {
             ConnectTo-ADController $ADParams
+            $services = (Get-Service "jujud-*").Name
+            foreach($i in $services) {
+                Set-ServiceLogon -Services $i
+            }
             Invoke-JujuReboot -Now
         }
         $domain = Get-DomainName $ADParams['domainName']
