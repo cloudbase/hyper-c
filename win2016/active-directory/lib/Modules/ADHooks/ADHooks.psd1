@@ -44,7 +44,8 @@ FunctionsToExport = @(
     "Start-AddControllerRelationJoinedHook",
     "Start-AddControllerRelationChangedHook",
     "Start-ADRelationJoinedHook",
-    "Start-ADRelationDepartedHook")
+    "Start-ADRelationDepartedHook",
+    "Set-RequiredPrivileges")
 
 # Variables to export from this module
 VariablesToExport = '*'

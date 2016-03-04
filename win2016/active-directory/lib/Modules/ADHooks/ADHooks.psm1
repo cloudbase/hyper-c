@@ -1345,3 +1345,5 @@ New-Alias -Name Run-AddControllerRelationJoinedHook -Value Start-AddControllerRe
 New-Alias -Name Run-AddControllerRelationChangedHook -Value Start-AddControllerRelationChangedHook
 New-Alias -Name Run-ADRelationJoinedHook -Value Start-ADRelationJoinedHook
 New-Alias -Name Run-ADRelationDepartedHook -Value Start-ADRelationDepartedHook
+
+Export-ModuleMember -Function *
