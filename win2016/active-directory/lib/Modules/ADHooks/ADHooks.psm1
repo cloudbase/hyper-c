@@ -24,10 +24,13 @@ $WINDOWS_FEATURES = @( 'AD-Domain-Services',
 $ADUserSection = "ADCharmUsers"
 
 function Set-RequiredPrivileges {
-    $me = whoami
-    Grant-Privilege -User $me -Grant SeBatchLogonRight
-    Grant-Privilege -User $me -Grant SeServiceLogonRight
-    Grant-Privilege -User $me -Grant SeAssignPrimaryTokenPrivilege
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Username
+    )
+    Grant-Privilege -User $Username -Grant SeBatchLogonRight
+    Grant-Privilege -User $Username -Grant SeServiceLogonRight
+    Grant-Privilege -User $Username -Grant SeAssignPrimaryTokenPrivilege
 }
 
 
@@ -356,7 +359,7 @@ function Create-ServicesUsers {
             $dcName $userName
         $u = "$domain\$userName"
         $cmd = @("net.exe", "localgroup", $administratorsGroupName, $u, "/add")
-        Invoke-JujuCom`mand -Command $cmd
+        Invoke-JujuCommand -Command $cmd
         Set-UserRunAsRights "$domain\$userName"
     }
 }
@@ -418,6 +421,7 @@ function Get-PeerContext {
         "username"=$null;
         "password"=$null;
         "domainName"=$null;
+        "netbiosname"=$null;
     }
 
     $ctx = Get-JujuRelationContext -RequiredContext $required -Relation "add-controller"
@@ -549,17 +553,20 @@ function Install-ADForest {
 }
 
 function Add-DNSForwarders {
-    $nameservers = Get-PrimaryAdapterDNSServers | Where-Object { $_ -ne "127.0.0.1" }
-    Write-JujuLog "Nameservers are: $nameservers"
-
-    if (!$nameservers) {
-        Write-JujuLog "No nameservers to add."
-        return
+    Param(
+        [Parameter(Mandatory=$false)]
+        [array]$Forwarders
+    )
+    if(!$nameservers) {
+        Write-JujuLog "No forwarders to add."
     }
 
     Start-ExecuteWithRetry {
         $hostname = $computername
         foreach($i in $nameservers) {
+            if($i -eq "127.0.0.1") {
+                continue
+            }
             $cmd = @("dnscmd.exe", $hostname, "/resetforwarders", $i)
             Invoke-JujuCommand -Command $cmd | Out-Null
         }
@@ -573,27 +580,29 @@ function Main-Slave {
         [hashtable]$ADParams
     )
     PROCESS {
+        ipconfig /flushdns
+        $adminUsername = Get-AdministratorAccount
+        $adminPassword = Get-JujuCharmConfig -Scope "default-administrator-password"
+        $domUser = ("{0}\{1}" -f $ADParams['netbiosname'], $adminUsername)
         Write-JujuLog "Executing main slave..."
         if (!(Is-InDomain $ADParams['domainName'])) {
             ConnectTo-ADController $ADParams
-            $services = (Get-Service "jujud-*").Name
-            foreach($i in $services) {
-                Set-ServiceLogon -Services $i
-            }
+            # $services = (Get-Service "jujud-*").Name
+            # Set-RequiredPrivileges -Username $domUser
+            # Add-UserToLocalGroup -Username $adminUsername -GroupName (Get-AdministratorsGroup)
+            # foreach($i in $services) {
+            #     Set-ServiceLogon -Services $i -UserName $domUser -Password $adminPassword
+            # }
             Invoke-JujuReboot -Now
         }
         $domain = Get-DomainName $ADParams['domainName']
 
         $safeModePassword = Get-JujuCharmConfig -Scope "safe-mode-password"
         $safeModePasswordSecure = ConvertTo-SecureString $safeModePassword -AsPlainText -Force
-
-        $adminPassword = Get-JujuCharmConfig -Scope "default-administrator-password"
         $dcsecpassword = ConvertTo-SecureString $adminPassword -AsPlainText -Force
-        $domain = Get-DomainName $ADParams['domainName']
-        $adminUsername = Get-AdministratorAccount
-        $adCredential = New-Object System.Management.Automation.PSCredential("$domain\$adminUsername", $dcsecpassword)
+        $adCredential = New-Object System.Management.Automation.PSCredential($domUser, $dcsecpassword)
 
-        Add-DNSForwarders
+        Add-DNSForwarders -Forwarders (Get-PrimaryAdapterDNSServers)
         Start-ExecuteWithRetry {
             Install-ADDSDomainController -NoGlobalCatalog:$false `
                 -InstallDns:$true -CreateDnsDelegation:$false `
@@ -602,6 +611,11 @@ function Main-Slave {
                 -NoRebootOnCompletion:$true -Credential $adCredential -Force
         } -MaxRetryCount 3 -RetryInterval 30
         Set-CharmState -Namespace "ADController" -Key "IsInstalled" -Value $true
+
+        $services = (Get-Service "jujud-*").Name
+        Set-RequiredPrivileges -Username $domUser
+        # Add-UserToLocalGroup -Username $adminUsername -GroupName (Get-AdministratorsGroup)
+        Set-ServiceLogon -Services $services -UserName $domUser -Password $adminPassword
 
         Invoke-JujuReboot -Now
     }
@@ -860,8 +874,8 @@ function Win-Peer {
                 Main-Slave $ADParams
             } else {
                 $dns = Get-PrimaryAdapterDNSServers
-                if ($dns -contains $ADParams['ip_address']) {
-                    $dns = $dns | Where-Object {$_ -ne $ADParams['ip_address']}
+                if ($dns -contains $ADParams['private-address']) {
+                    $dns = $dns | Where-Object {$_ -ne $ADParams['private-address']}
                     if ($dns) {
                         Set-DnsClientServerAddress `
                             -InterfaceAlias (Get-MainNetadapter) `
@@ -898,9 +912,9 @@ function Finish-Install {
             $nameservers = ,"127.0.0.1" + $nameservers
         }
         Set-DnsClientServerAddress -InterfaceAlias $netadapter `
-            -ServerAddresses $nameservers
+            -ServerAddresses "127.0.0.1"
     }
-    Add-DNSForwarders
+    Add-DNSForwarders -Forwarders $nameservers
     Open-DCPorts
     Set-JujuStatus -Status "active"
 }

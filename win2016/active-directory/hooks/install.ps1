@@ -7,7 +7,6 @@ Import-Module JujuLogging
 try {
     Import-Module ADHooks
     
-    Set-RequiredPrivileges
     Start-TimeResync
     Start-InstallHook
 } catch {

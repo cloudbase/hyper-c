@@ -74,7 +74,6 @@ function Grant-Privilege {
         $privBin = (get-command SetUserAccountRights.exe -ErrorAction SilentlyContinue).source
         if(!$privBin) {
             $privBin = Join-Path (Join-Path $moduleHome "Bin") "SetUserAccountRights.exe"
-            Write-JujuWarning "Failed to find SetUserAccountRights.exe in PATH. Trying with: $privBin"
         }
         if(!(Test-Path $privBin)) {
             Throw "Cound not find SetUserAccountRights.exe on the system."
@@ -197,7 +196,7 @@ function Set-ServiceLogon {
     param(
         [Parameter(Mandatory=$true, ValueFromPipeline=$true, Position=0)]
         [array]$Services,
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory=$false)]
         [string]$UserName="LocalSystem",
         [Parameter(Mandatory=$false)]
         [string]$Password=""
@@ -376,8 +375,8 @@ function Get-AccountObjectByName {
         [string]$Username
     )
     PROCESS {
-        $u = Get-ManagementObject -Class "Win32_Account" `
-                                  -Filter ("Name='{0}'" -f $Username)
+        Write-JujuInfo ("Looking for {0}" -f $Username)
+        $u = Get-ManagementObject -Class Win32_UserAccount -Filter ("Name='{0}'" -f $Username)
         if (!$u) {
             Throw [System.Management.Automation.ItemNotFoundException] "User not found: $Username"
         }
