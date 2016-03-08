@@ -580,6 +580,7 @@ function Main-Slave {
         [hashtable]$ADParams
     )
     PROCESS {
+        Set-DnsClientServerAddress -InterfaceAlias (Get-MainNetadapter) -ServerAddresses $ADParams['private-address']
         ipconfig /flushdns
         $adminUsername = Get-AdministratorAccount
         $adminPassword = Get-JujuCharmConfig -Scope "default-administrator-password"
@@ -587,12 +588,6 @@ function Main-Slave {
         Write-JujuLog "Executing main slave..."
         if (!(Is-InDomain $ADParams['domainName'])) {
             ConnectTo-ADController $ADParams
-            # $services = (Get-Service "jujud-*").Name
-            # Set-RequiredPrivileges -Username $domUser
-            # Add-UserToLocalGroup -Username $adminUsername -GroupName (Get-AdministratorsGroup)
-            # foreach($i in $services) {
-            #     Set-ServiceLogon -Services $i -UserName $domUser -Password $adminPassword
-            # }
             Invoke-JujuReboot -Now
         }
         $domain = Get-DomainName $ADParams['domainName']
@@ -873,15 +868,15 @@ function Win-Peer {
                 Set-CharmState -Namespace "AD" -Key "InstallingSlave" -Value $true 
                 Main-Slave $ADParams
             } else {
-                $dns = Get-PrimaryAdapterDNSServers
-                if ($dns -contains $ADParams['private-address']) {
-                    $dns = $dns | Where-Object {$_ -ne $ADParams['private-address']}
-                    if ($dns) {
-                        Set-DnsClientServerAddress `
-                            -InterfaceAlias (Get-MainNetadapter) `
-                            -ServerAddresses $dns
-                    }
-                }
+                # $dns = Get-PrimaryAdapterDNSServers
+                # if ($dns -contains $ADParams['private-address']) {
+                #     $dns = $dns | Where-Object {$_ -ne $ADParams['private-address']}
+                #     if ($dns) {
+                #         Set-DnsClientServerAddress `
+                #             -InterfaceAlias (Get-MainNetadapter) `
+                #             -ServerAddresses $dns
+                #     }
+                # }
                 Set-CharmState -Namespace "AD" -Key "InstallingSlave" -Value $false
             }
         }
@@ -904,17 +899,13 @@ function Win-Peer {
 }
 
 function Finish-Install {
-    $nameservers = Get-PrimaryAdapterDNSServers
+    $nameservers = Get-CharmState -Key "nameservers"
     $netadapter = Get-MainNetadapter
 
     if ($nameservers) {
-        if (!("127.0.0.1" -in $nameservers)) {
-            $nameservers = ,"127.0.0.1" + $nameservers
-        }
-        Set-DnsClientServerAddress -InterfaceAlias $netadapter `
-            -ServerAddresses "127.0.0.1"
+        Set-DnsClientServerAddress -InterfaceAlias $netadapter -ServerAddresses "127.0.0.1"
+        Add-DNSForwarders -Forwarders $nameservers
     }
-    Add-DNSForwarders -Forwarders $nameservers
     Open-DCPorts
     Set-JujuStatus -Status "active"
 }
@@ -1239,8 +1230,28 @@ function Start-ADRelationDepartedHook {
     return $true
 }
 
+function Save-DefaultResolvers {
+    <#
+    .SYNOPSIS
+    This function is really only useful if run as the first thing during install. It saves the nameservers set on
+    the default interface to the registry.
+    #>
+    PROCESS {
+        $inState = Get-CharmState -Key "nameservers"
+        if($inState) {
+            return
+        }
+
+        $servers = Get-PrimaryAdapterDNSServers
+        if($servers) {
+            Set-CharmState -Key "nameservers" -Value $servers
+        }
+    }
+}
+
 function Start-InstallHook {
     Write-JujuLog "Running install hook..."
+    Save-DefaultResolvers
     Prepare-ADInstall
     Run-LeaderElectedHook
     Write-JujuLog "Finished running install hook."
