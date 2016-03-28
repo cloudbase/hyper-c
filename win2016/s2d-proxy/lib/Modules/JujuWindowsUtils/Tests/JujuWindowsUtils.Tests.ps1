@@ -70,7 +70,63 @@ Describe "Test Install-Msi" {}
 
 Describe "Test Expand-ZipArchive" {}
 
-Describe "Test Install-WindowsFeatures" {}
+Describe "Test Install-WindowsFeatures" {
+    # This is missing on a desktop Windows workstation
+    function Install-WindowsFeature { }
+
+    Mock Invoke-JujuReboot -ModuleName JujuWindowsUtils { }
+
+    Context "Windows features are enabled for Nano" {
+        Mock Get-IsNanoServer -ModuleName JujuWindowsUtils { return $true }
+        Mock Get-WindowsOptionalFeature -ModuleName JujuWindowsUtils {
+            return @{
+                'State' = 'Enabled';
+                'RestartNeeded' = $true
+            }
+        }
+        It "should install features and do a reboot" {
+            $fakeFeatures = @('NanoFeature_1', 'NanoFeature_2')
+            Install-WindowsFeatures -Features $fakeFeatures | Should BeNullOrEmpty
+            Assert-MockCalled Get-IsNanoServer -Exactly 2 -ModuleName JujuWindowsUtils
+            Assert-MockCalled Get-WindowsOptionalFeature -Exactly 2 -ModuleName JujuWindowsUtils
+            Assert-MockCalled Invoke-JujuReboot -Exactly 1 -ModuleName JujuWindowsUtils
+        }
+    }
+
+    Context "Windows features are installed for regular Windows Server" {
+        Mock Get-IsNanoServer -ModuleName JujuWindowsUtils { return $false }
+        Mock Install-WindowsFeature -ModuleName JujuWindowsUtils {
+            return @{
+                'Success' = $true;
+                'RestartNeeded' = $false
+            }
+        }
+        It "should install features and without a reboot" {
+            $fakeFeatures = @('WindowsFeature_1', 'WindowsFeature_2')
+            Install-WindowsFeatures -Features $fakeFeatures | Should BeNullOrEmpty
+            Assert-MockCalled Get-IsNanoServer -Exactly 2 -ModuleName JujuWindowsUtils
+            Assert-MockCalled Install-WindowsFeature -Exactly 2 -ModuleName JujuWindowsUtils
+            Assert-MockCalled Invoke-JujuReboot -Exactly 0 -ModuleName JujuWindowsUtils
+        }
+    }
+
+    Context "Windows feature failed to install on regular Windows Server" {
+        Mock Get-IsNanoServer -ModuleName JujuWindowsUtils { return $false }
+        Mock Install-WindowsFeature -ModuleName JujuWindowsUtils {
+            return @{
+                'Success' = $false;
+                'RestartNeeded' = $true
+            }
+        }
+        It "should install features and without a reboot" {
+            $fakeFeatures = @('WindowsFeature_1')
+            { Install-WindowsFeatures -Features $fakeFeatures } | Should Throw
+            Assert-MockCalled Get-IsNanoServer -Exactly 1 -ModuleName JujuWindowsUtils
+            Assert-MockCalled Install-WindowsFeature -Exactly 1 -ModuleName JujuWindowsUtils
+            Assert-MockCalled Invoke-JujuReboot -Exactly 0 -ModuleName JujuWindowsUtils
+        }
+    }
+}
 
 Describe "Test Get-AccountObjectByName" {}
 

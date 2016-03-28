@@ -51,8 +51,7 @@ RequiredModules = @(
     "JujuHooks",
     "JujuUtils",
     "JujuWindowsUtils",
-    "Networking"
-    )
+    "Networking")
 
 # Functions to export from this module
 FunctionsToExport = @(
@@ -60,7 +59,10 @@ FunctionsToExport = @(
     "Start-InstallHook",
     "Restart-Nova",
     "Restart-Neutron",
-    "Stop-Neutron")
+    "Stop-Neutron",
+    "Stop-Nova",
+    "Start-WSFCRelationJoinedHook",
+    "Start-WSFCRelationChangedHook")
 
 # Cmdlets to export from this module
 CmdletsToExport = '*'

@@ -3,27 +3,17 @@
 #
 
 $ErrorActionPreference = "Stop"
-Import-Module JujuLoging
+
+Import-Module JujuLogging
 
 try {
-    Import-Module ADCharmUtils
-    Import-Module S2DUtils
+    Import-Module JujuUtils
 
-    Write-JujuInfo "Running relation changed"
-    $script = "$psscriptroot\s2d-relation-changed-real.ps1"
-    $ctx = Get-ActiveDirectoryContext
-    if(!$ctx["adcredentials"]){
-        Write-JujuWarning "Failed to get credentials. Machine not yet in AD?"
-        return
-    }
-    $args = @("-File", "$script")
-    Write-JujuInfo "Running $script"
-    $exitCode = Start-ProcessAsUser -Command "$PShome\powershell.exe" -Arguments ($args -Join " ") -Credential $ctx["adcredentials"][0]["pscredentials"]
-    if($exitCode){
-        Throw "Failed run $script --> $exitCode"
-    }
+    $hooksFolder = Join-Path $env:CHARM_DIR "hooks"
+    $wrapper = Join-Path $hooksFolder "run-with-ad-credentials.ps1"
+    $hook = Join-Path $hooksFolder "s2d-relation-changed-real.ps1"
+    Start-ExternalCommand { & $wrapper $hook }
 } catch {
     Write-HookTracebackToLog $_
     exit 1
 }
-

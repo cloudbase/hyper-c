@@ -3,12 +3,13 @@
 #
 
 $ErrorActionPreference = 'Stop'
-Import-Module JujuLoging
+
+Import-Module JujuLogging
 
 try {
-    $ret = Install-WindowsFeature -Name File-Services, Failover-Clustering -IncludeManagementTools
-    if (!$ret.Success){
-        Throw "Failed to install windows features"
+    $status = Install-WindowsFeature -Name 'File-Services','Failover-Clustering' -IncludeManagementTools
+    if (!$status.Success){
+        Throw "Failed to install Windows feature"
     }
     Enable-WindowsOptionalFeature -Online -FeatureName "ActiveDirectory-Powershell" -All
 } catch {

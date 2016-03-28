@@ -25,6 +25,13 @@ options:
       If you use this option, you may enable file integrity checking by specifying
       an md5sum at the end of the URL as follows:
         https://example.com/installer.msi#md5=<hash>
+  enable-cluster-driver:
+    type: boolean
+    default: "False"
+    description: |
+      Enables the Hyper-V compute driver for clustering. This requires at least two Hyper-V compute
+      joined to a cluster.
+      NOTE: Available only in releases >= Mitaka
   ovs-installer-url:
     type: string
     default: "https://www.cloudbase.it/downloads/openvswitch-hyperv-installer-beta.msi#md5=9fdf53bb41dd398843a0ac52fe023a65"

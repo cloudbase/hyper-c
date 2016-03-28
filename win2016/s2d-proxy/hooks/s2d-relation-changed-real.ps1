@@ -3,14 +3,16 @@
 #
 
 $ErrorActionPreference = 'Stop'
-Import-Module JujuLoging
+
+Import-Module JujuLogging
 
 try {
-    $modulePath = "$PSScriptRoot\hooks.psm1"
-    Import-Module -Force -DisableNameChecking $modulePath
+    Import-Module S2DProxyHooks
 
     Write-JujuLog "Running : Start-S2DRelationChanged"
     Start-S2DRelationChanged
+    Write-JujuLog "Running : Start-SMBShareRelationChanged"
+    Start-SMBShareRelationChanged
 } catch {
     Write-HookTracebackToLog $_
     exit 1

@@ -12,8 +12,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-Import-Module Microsoft.Powershell.Utility
-
 $version = $PSVersionTable.PSVersion.Major
 if ($version -lt 4){
     # Get-CimInstance is not supported on powershell versions earlier then 4
@@ -85,7 +83,7 @@ function Test-FileIntegrity {
 function Invoke-FastWebRequest {
     <#
     .SYNOPSIS
-    Invoke-FastWebRequest downloads a file form the web via HTTP. This function will work on all modern windows versions,
+    Invoke-FastWebRequest downloads a file from the web via HTTP. This function will work on all modern windows versions,
     including Windows Server Nano. This function also allows file integrity checks using common hashing algorithms:
 
     "SHA1", "SHA256", "SHA384", "SHA512", "MACTripleDES", "MD5", "RIPEMD160"
@@ -138,23 +136,20 @@ function Invoke-FastWebRequest {
         }
 
         $client = new-object System.Net.Http.HttpClient
-        $task = $client.GetAsync($Uri)
-        $task.wait()
-        $response = $task.Result
+        $requestMessage = new-object System.Net.Http.HttpRequestMessage "HEAD", $Uri
+        $headRequest = $client.SendAsync($requestMessage)
+        $response = $headRequest.Result
         $status = $response.EnsureSuccessStatusCode()
+        $contentLength = $response.Content.Headers.ContentLength
 
+        $task = $client.GetStreamAsync($Uri)
+        $response = $task.Result
         $outStream = New-Object IO.FileStream $OutFile, Create, Write, None
 
         try {
-            $task = $response.Content.ReadAsStreamAsync()
-            $task.Wait()
-            $inStream = $task.Result
-
-            $contentLength = $response.Content.Headers.ContentLength
-
             $totRead = 0
             $buffer = New-Object Byte[] 1MB
-            while (($read = $inStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            while (($read = $response.Read($buffer, 0, $buffer.Length)) -gt 0) {
                 $totRead += $read
                 $outStream.Write($buffer, 0, $read);
 

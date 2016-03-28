@@ -37,14 +37,14 @@ Describe 'Calling Invoke-JujuCommand' {
     }
 
     It "Should throw an exception using powershell commands" {
-        $d = Join-Path $workspace "test"
+        $d = Join-Path $workspace ("temp#" + ("{0:d5}" -f (Get-Random)).Substring(0,5))
         { mkdir $d } | Should Not Throw
         $cmd = @("mkdir", $d)
-        { Invoke-JujuCommand -Command $cmd } | Should Throw
+        { Invoke-JujuCommand -Command $cmd -ErrorAction Stop} | Should Throw
     }
 
     It "Should throw on non existent powershell commandlet" {
         $cmd = @("boguscommandlet")
-        { Invoke-JujuCommand -Command $cmd } | Should Throw
+        { Invoke-JujuCommand -Command $cmd -ErrorAction Stop} | Should Throw
     }
 }

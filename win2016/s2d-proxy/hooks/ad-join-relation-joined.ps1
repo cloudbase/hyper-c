@@ -2,11 +2,9 @@
 # Copyright 2016 Cloudbase Solutions Srl
 #
 
-# we want to exit on error
 $ErrorActionPreference = "Stop"
-$computername = [System.Net.Dns]::GetHostName()
-Import-Module JujuLoging
-Import-Module JujuUtils
+
+Import-Module JujuLogging
 
 function Get-AdUserAndGroup {
     $creds = @{
@@ -20,9 +18,10 @@ function Get-AdUserAndGroup {
 
 try {
     Import-Module ADCharmUtils
-    
-    $adUser = Get-AdUserAndGroup
+    Import-Module JujuUtils
 
+    $adUser = Get-AdUserAndGroup
+    $computername = [System.Net.Dns]::GetHostName()
     $relation_set = @{
         'adusers' = $adUser;
         'computername' = $computername;

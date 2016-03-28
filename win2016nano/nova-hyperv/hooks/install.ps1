@@ -1,14 +1,16 @@
 #
-# Copyright 2014 Cloudbase Solutions SRL
+# Copyright 2014-2016 Cloudbase Solutions SRL
 #
 
 $ErrorActionPreference = "Stop"
-Import-Module JujuLoging
 
-try{
+Import-Module JujuLogging
+
+try {
     Import-Module ComputeHooks
+
     Start-InstallHook
-}catch{
+} catch {
     Write-HookTracebackToLog $_
     exit 1
 }

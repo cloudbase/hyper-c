@@ -12,9 +12,29 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+Import-Module JujuHelper
+Import-Module JujuLogging
+Import-Module JujuHooks
+Import-Module JujuUtils
+
 $moduleHome = Split-Path -Parent $MyInvocation.MyCommand.Path
 $administratorsGroupSID = "S-1-5-32-544"
 $computername = [System.Net.Dns]::GetHostName()
+
+function Start-TimeResync {
+    Write-JujuInfo "Synchronizing time..."
+    $ts = @("tzutil.exe", "/s", "UTC")
+    Invoke-JujuCommand -Command $ts | Out-Null
+
+    try {
+        Start-Service "w32time"
+        $manualTS = @("w32tm.exe", "/config", "/manualpeerlist:time.windows.com", "/syncfromflags:manual", "/update")
+        Invoke-JujuCommand -Command $manualTS | Out-Null
+    } catch {
+        # not a fatal error
+        Write-JujuErr "Failed to synchronize time: $_"
+    }
+}
 
 function Get-ServerLevelKey {
     <#
@@ -61,7 +81,7 @@ function Grant-Privilege {
         }
     }
     PROCESS {
-        Write-JujuInfo "Running: $privBin -g $User -v $Grant"
+        #Write-JujuInfo "Running: $privBin -g $User -v $Grant"
         $cmd = @($privBin, "-g", "$User", "-v", $Grant)
         Invoke-JujuCommand -Command $cmd | Out-Null
     }
@@ -134,6 +154,8 @@ function Get-ComponentIsInstalled {
     This commandlet checks if a program is installed and returns a boolean value. Exact product names must be used, wildcards are not accepted.
     .PARAMETER Name
     The name of the product to check for
+    .PARAMETER Exact
+    Search for exact name or allow wildcards such as "%"
 
     .NOTES
     This commandlet is not supported on Nano server
@@ -141,7 +163,8 @@ function Get-ComponentIsInstalled {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory=$true)]
-        [string]$Name
+        [string]$Name,
+        [switch]$Exact=$true
     )
     BEGIN {
         if((Get-IsNanoServer)) {
@@ -152,10 +175,14 @@ function Get-ComponentIsInstalled {
         }
     }
     PROCESS {
-        $products = Get-ManagementObject -Class Win32_Product
-        $component = $products | Where-Object { $_.Name -eq $Name}
+        $modifier = " LIKE "
+        if ($Exact){
+            $modifier = "="
+        }
+        $query = ("Name{0}'{1}'" -f @($modifier, $Name))
+        $products = Get-ManagementObject -Class Win32_Product -Filter $query
 
-        return ($component -ne $null)
+        return ($products.Count -ne 0)
     }
 }
 
@@ -318,25 +345,41 @@ function Expand-ZipArchive {
 }
 
 function Install-WindowsFeatures {
+    <#
+    .SYNOPSIS
+    This function installs windows features. For Nano, you already need to have the features installed, and this function merely enables them.
+    .PARAMETER Features
+    Array of Windows feature names that will be installed (or enabled on Nano).
+    #>
     [CmdletBinding()]
-    param(
+    Param(
         [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
         [array]$Features
     )
     PROCESS {
         $rebootNeeded = $false
-        foreach ($feature in $Features) {
-            $state = Start-ExecuteWithRetry -Command {
-                Install-WindowsFeature -Name $feature -ErrorAction Stop
-            }
-            if ($state.Success -eq $true) {
-                if ($state.RestartNeeded -eq 'Yes') {
-                    $rebootNeeded = $true
+            foreach ($feature in $Features) {
+                if (Get-IsNanoServer) {
+                    $featureStat = Get-WindowsOptionalFeature -Online -FeatureName $feature
+                    if ($featureStat.State -ne "Enabled") {
+                        $featureInstall = Enable-WindowsOptionalFeature -Online -FeatureName $feature -All -NoRestart
+                        if ($featureInstall.RestartNeeded) {
+                            $rebootNeeded = $true
+                        }
+                    } elseif ($featureStat.RestartNeeded) {
+                        $rebootNeeded = $true
+                    }
+                } else {
+                    $state = Install-WindowsFeature -Name $feature -ErrorAction Stop
+                    if ($state.Success -eq $true) {
+                        if ($state.RestartNeeded -eq 'Yes') {
+                            $rebootNeeded = $true
+                        }
+                    } else {
+                        throw "Install failed for feature $feature"
+                    }
                 }
-            } else {
-                throw "Install failed for feature $feature"
             }
-        }
         if ($rebootNeeded) {
             Invoke-JujuReboot -Now
         }
@@ -831,6 +874,152 @@ function Import-Certificate() {
     }
 }
 
+function Set-PowerProfile {
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$true)]
+        [ValidateSet("PowerSave", "Balanced", "Performance")]
+        [string]$PowerProfile
+    )
+    PROCESS {
+        $guids = @{
+            "PowerSave"="a1841308-3541-4fab-bc81-f71556f20b4a";
+            "Balanced"="381b4222-f694-41f0-9685-ff5bb260df2e";
+            "Performance"="8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c";
+        }
+        $cmd = @("PowerCfg.exe", "/S", $guids[$PowerProfile])
+        Invoke-JujuCommand -Command $cmd | Out-Null
+    }
+}
+
+function Get-IniFileValue {
+    [CmdletBinding()]
+    param
+    (
+        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$Key,
+
+        [parameter()]
+        [string]$Section = "DEFAULT",
+
+        [parameter()]
+        [string]$Default = $null,
+
+        [parameter(Mandatory=$true)]
+        [string]$Path
+    )
+    process {
+        $api = [Cloudbase.PSUtils.Win32IniApi](New-Object "Cloudbase.PSUtils.Win32IniApi")
+        return $api.GetIniValue($Section, $Key, $Default, $Path)
+    }
+}
+
+function Set-IniFileValue {
+    [CmdletBinding()]
+    param
+    (
+        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$Key,
+
+        [parameter()]
+        [string]$Section = "DEFAULT",
+
+        [parameter(Mandatory=$true)]
+        [string]$Value,
+
+        [parameter(Mandatory=$true)]
+        [string]$Path
+    )
+    process {
+        $api = [Cloudbase.PSUtils.Win32IniApi](New-Object "Cloudbase.PSUtils.Win32IniApi")
+        $api.SetIniValue($Section, $Key, $Value, $Path)
+    }
+}
+
+function Remove-IniFileValue {
+    [CmdletBinding()]
+    param
+    (
+        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$Key,
+
+        [parameter()]
+        [string]$Section = "DEFAULT",
+
+        [parameter(Mandatory=$true)]
+        [string]$Path
+    )
+    process {
+        $api = [Cloudbase.PSUtils.Win32IniApi](New-Object "Cloudbase.PSUtils.Win32IniApi")
+        $api.SetIniValue($Section, $Key, $null, $Path)
+    }
+}
+
+
+function Start-ProcessAsUser {
+    <#
+    .SYNOPSIS
+    Starts a process under a user defined by the credentials given as a parameter.
+    This command is similar to Linux "su", making possible to run a command under
+    different Windows users, for example a user which is a domain administrator.
+    .DESCRIPTION
+    It uses a wrapper of advapi32.dll functionality,
+    [PSCloudbase.ProcessManager]::RunProcess, which is defined as native C++ code
+    in the same file.
+    .PARAMETER Command
+    The executable file path.
+    .PARAMETER Arguments
+    The arguments that will be sent to the process.
+    .PARAMETER Credential
+    The credential under which the newly spawned process will run. A credential can
+    be created by instantiating System.Management.Automation.PSCredential class.
+    .PARAMETER LoadUserProfile
+    Whether to load the user profile in case the process needs it.
+    .EXAMPLE
+    $exitCode = Start-ProcessAsUser -Command "$PShome\powershell.exe" -Arguments @("script.ps1", "arg1", "arg2") -Credential $credential
+    .Notes
+    The user under which this command is run must have the appropriate privilleges
+    and to be a local administrator in order to be able to execute the command
+    successfully.
+    #>
+    [CmdletBinding()]
+    Param
+    (
+        [parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [String]$Command,
+        [parameter()]
+        [array]$Arguments,
+        [parameter(Mandatory=$true)]
+        [PSCredential]$Credential,
+        [parameter()]
+        [bool]$LoadUserProfile = $true,
+        [ValidateSet("InteractiveLogon", "NetworkLogon", "BatchLogon", "ServiceLogon")]
+        [string]$LogonType="ServiceLogon"
+    )
+
+    Process
+    {
+        $nc = $Credential.GetNetworkCredential()
+        $domain = "."
+        if($nc.Domain)
+        {
+            $domain = $nc.Domain
+        }
+        $logonTypes = @{
+            "InteractiveLogon" = 2;
+            "NetworkLogon" = 3;
+            "BatchLogon" = 4;
+            "ServiceLogon" = 5;
+        }
+
+        $l = $logonTypes[$LogonType]
+
+        return [Cloudbase.PSUtils.ProcessManager]::RunProcess(
+            $nc.UserName, $nc.Password, $domain, $Command, $Arguments,
+            $LoadUserProfile, $l)
+    }
+}
+
 # Backwards compatible aliases
 New-Alias -Name Is-ComponentInstalled -Value Get-ComponentIsInstalled
 New-Alias -Name Change-ServiceLogon -Value Set-ServiceLogon
@@ -841,3 +1030,5 @@ New-Alias -Name Convert-SIDToFriendlyName -Value Get-AccountNameFromSID
 New-Alias -Name Check-Membership -Value Get-UserGroupMembership
 New-Alias -Name Create-LocalAdmin -Value New-LocalAdmin
 New-Alias -Name Delete-WindowsUser -Value Remove-WindowsUser
+
+Export-ModuleMember -Function * -Alias *

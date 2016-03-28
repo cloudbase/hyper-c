@@ -7,6 +7,7 @@ Import-Module JujuHooks
 Import-Module JujuUtils
 Import-Module JujuWindowsUtils
 Import-Module Networking
+Import-Module WSFCCharmUtils
 
 $installDir = "${env:ProgramFiles}\Cloudbase Solutions\OpenStack\Nova"
 $novaDir = $installDir
@@ -23,6 +24,7 @@ $distro_urls = @{
             'zip' = $null;
         };
         "ovs" = $false;
+        "cluster" = $false
     };
     'juno' = @{
         "installer" = @{
@@ -30,6 +32,7 @@ $distro_urls = @{
             'zip' = $null;
         };
         "ovs" = $false;
+        "cluster" = $false
     };
     'kilo' = @{
         "installer" = @{
@@ -37,6 +40,7 @@ $distro_urls = @{
             'zip' = $null;
         }
         "ovs" = $true;
+        "cluster" = $false
     };
     'liberty' = @{
         "installer" = @{
@@ -44,11 +48,19 @@ $distro_urls = @{
             'zip' = 'https://www.cloudbase.it/downloads/HyperVNovaCompute_Liberty_12_0_0.zip';
         };
         "ovs" = $true;
+        "cluster" = $false
+    };
+    'mitaka' = @{
+        "installer" = @{
+            'msi' = $null;
+            'zip' = $null;
+        };
+        "ovs" = $true;
+        "cluster" = $true
     };
 }
 
-function Install-Prerequisites
-{
+function Install-Prerequisites {
     if ((Get-IsNanoServer)){
         return $true
     }
@@ -72,7 +84,6 @@ function Install-Prerequisites
     Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Management-PowerShell -All -NoRestart
     Import-Module hyper-v
 }
-
 
 function Get-OpenstackVersion {
     $distro = Get-JujuCharmConfig -Scope "openstack-version"
@@ -222,6 +233,33 @@ function Install-RootWrap {
     return $true
 }
 
+function Get-ServiceWrapper {
+    Param(
+        [Parameter(Mandatory=$false)]
+        [string]$Service
+    )
+    PROCESS {
+        $wrapperName = ("OpenStackService{0}.exe" -f $Service)
+        $svcPath = Join-Path $novaDir ("bin\{0}" -f $wrapperName)
+        if(!(Test-Path $svcPath)) {
+            $svcPath = Join-Path $novaDir "bin\OpenStackService.exe"
+            if(!(Test-Path $svcPath)) {
+                Throw "Failed to find service wrapper"
+            }
+        }
+        return $svcPath
+    }
+}
+
+function Enable-MSiSCSI {
+    Write-JujuWarning "Enabling MSiSCSI"
+    $svc = Get-Service MSiSCSI -ErrorAction SilentlyContinue
+    if($svc) {
+        Start-Service MSiSCSI
+        Set-Service MSiSCSI -StartupType Automatic
+    }
+}
+
 function Get-CharmServices {
     $template_dir = Get-TemplatesDir
     $distro = Get-OpenstackVersion
@@ -231,8 +269,8 @@ function Get-CharmServices {
 
     $pythonDir = Get-PythonDir
 
-    $serviceWrapperNova = Join-Path $novaDir "bin\OpenStackServiceNova.exe"
-    $serviceWrapperNeutron = Join-Path $novaDir "bin\OpenStackServiceNeutron.exe"
+    $serviceWrapperNova = Get-ServiceWrapper -Service Nova
+    $serviceWrapperNeutron = Get-ServiceWrapper -Service Neutron
     $novaExe = Join-Path $pythonDir "Scripts\nova-compute.exe"
     $neutronHypervAgentExe = Join-Path $pythonDir "Scripts\neutron-hyperv-agent.exe"
     $neutronOpenvswitchExe = Join-Path $pythonDir "Scripts\neutron-openvswitch-agent.exe"
@@ -267,10 +305,10 @@ function Get-CharmServices {
                     "relation"="system";
                 },
                 @{
-                    "generator"="Get-S2DContainerContext";
+                    "generator"="Get-S2DContext";
                     "relation"="s2d";
                 }
-                );
+            );
         };
         "neutron"=@{
             "myname"="neutron";
@@ -297,7 +335,7 @@ function Get-CharmServices {
                     "relation"="system";
                 },
                 @{
-                    "generator"="Get-S2DContainerContext";
+                    "generator"="Get-S2DContext";
                     "relation"="s2d";
                 }
                 );
@@ -327,7 +365,7 @@ function Get-CharmServices {
                     "relation"="system";
                 },
                 @{
-                    "generator"="Get-S2DContainerContext";
+                    "generator"="Get-S2DContext";
                     "relation"="s2d";
                 }
                 );
@@ -335,7 +373,6 @@ function Get-CharmServices {
     }
     return $JujuCharmServices
 }
-
 
 function Get-RabbitMQContext {
     Write-JujuLog "Generating context for RabbitMQ"
@@ -350,22 +387,40 @@ function Get-RabbitMQContext {
         "password"=$null;
     }
 
-    $ctx = Get-JujuRelationContext -Relation "amqp" -RequiredContext $required
+    $optional = @{
+        "vhost"=$null;
+        "username"=$null;
+        "ha_queues"=$null;
+    }
+
+    $ctx = Get-JujuRelationContext -Relation "amqp" -RequiredContext $required -OptionalContext $optional
+
+    $data = @{}
 
     if($ctx.Count) {
-        $ctx["rabbit_userid"] = $username;
-        $ctx["rabbit_virtual_host"] = $vhost;
-        $ctx["rabbit_host"]=$ctx["hostname"];
-        $ctx["rabbit_password"]=$ctx["password"];
-        $ctx.Remove("hostname")
-        $ctx.Remove("password")
+        if(!$ctx["username"]) {
+            $data["rabbit_userid"] = $username
+        } else {
+            $data["rabbit_userid"] = $ctx["username"]
+        }
+        if(!$ctx["vhost"]){
+            $data["rabbit_virtual_host"] = $vhost
+        } else {
+            $data["rabbit_virtual_host"] = $ctx["vhost"]
+        }
+        if($ctx["ha_queues"]) {
+            $data["rabbit_ha_queues"] = "True"
+        } else {
+            $data["rabbit_ha_queues"] = "False"
+        }
+        $data["rabbit_host"]=$ctx["hostname"];
+        $data["rabbit_password"]=$ctx["password"];
     }
-    return $ctx
+    return $data
 }
 
-
 function Get-NeutronUrl {
-    Param (
+    Param(
         [Parameter(Mandatory=$true)]
         [string]$rid,
         [Parameter(Mandatory=$true)]
@@ -380,31 +435,35 @@ function Get-NeutronUrl {
     return
 }
 
-
-function Get-S2DContainerContext {
+function Get-S2DContext {
     $instancesDir = (Get-JujuCharmConfig -Scope 'instances-dir').Replace('/', '\')
-    $ctx = @{
+    $ctxt = @{
         "instances_dir"=$instancesDir;
     }
 
     $required = @{
-        "s2dvolpath"=$null;
+        "volumepath"=$null;
     }
 
-    $ctx = Get-JujuRelationContext -Relation "s2d" -RequiredContext $required
-    if($ctx.Count){
-        if($ctx["s2dvolpath"] -and (Test-Path $ctx["s2dvolpath"])){
-            $ctx["instances_dir"] = $ctx["s2dvolpath"]
-            return $ctx
+    $s2dCtxt = Get-JujuRelationContext -Relation "s2d" -RequiredContext $required
+    if($s2dCtxt.Count){
+        if($s2dCtxt["volumepath"] -and (Test-Path $s2dCtxt["volumepath"])){
+            $ctxt["instances_dir"] = $s2dCtxt["volumepath"]
+            $enableCluster = Get-JujuCharmConfig -Scope 'enable-cluster-driver'
+            if ($distro_urls[$version]['cluster'] -and $enableCluster) {
+                $ctxt['compute_driver'] = 'hyperv.nova.cluster.driver.HyperVClusterDriver'
+            } else {
+                $ctxt['compute_driver'] = 'hyperv.nova.driver.HyperVDriver'
+            }
+            return $ctxt
         }
         Write-JujuWarning "Relation information states that an s2d volume should be present, but could not be found locally."
     }
-    $ctx["instances_dir"] = $instancesDir
-    # If we get here, it means there was no s2dvolpath
-    if (!(Test-Path $ctx["instances_dir"])){
-        mkdir $ctx["instances_dir"]
+    # If we get here, it means there was no volumepath
+    if (!(Test-Path $ctxt["instances_dir"])) {
+        mkdir $ctxt["instances_dir"]
     }
-    return $ctx
+    return $ctxt
 }
 
 function Get-NeutronContext {
@@ -468,7 +527,6 @@ function Get-GlanceContext {
     return $new
 }
 
-
 function Get-CharmConfigContext {
     $config = Get-JujuCharmConfig
     $asHash = @{}
@@ -484,7 +542,7 @@ function Get-CharmConfigContext {
         }
         $asHash[$name.Replace("-", "_")] = $v 
     }
-    $asHash["my_ip"] = Get-JujuUnitPrivateIP
+    $asHash['my_ip'] = Get-JujuUnitPrivateIP
     return $asHash
 }
 
@@ -551,7 +609,7 @@ function Set-IncompleteStatusContext {
 }
 
 function Generate-Config {
-    param (
+    Param(
         [Parameter(Mandatory=$true)]
         [string]$ServiceName
     )
@@ -569,10 +627,10 @@ function Generate-Config {
     $allContexts = [System.Collections.Generic.List[object]](New-Object "System.Collections.Generic.List[object]")
 
     foreach ($context in $service['context_generators']){
-        Write-JujuInfo "Getting context for $context"
+        Write-JujuInfo ("Getting context for {0}" -f $context["relation"])
         $allContexts.Add($context["relation"])
         $ctx = & $context["generator"]
-        Write-JujuInfo "Got $context context $ctx"
+        Write-JujuInfo ("Got {0} context: {1}" -f @($context["relation"], $ctx.Keys))
         if (!$ctx.Count){
             # Context is empty. Probably peer not ready
             Write-JujuWarning "Context for $context is EMPTY"
@@ -600,7 +658,7 @@ function Get-FallbackNetadapter {
 }
 
 function Get-InterfaceFromConfig {
-    Param (
+    Param(
         [string]$ConfigOption="data-port",
         [switch]$MustFindAdapter=$false
     )
@@ -660,7 +718,7 @@ function Get-RealInterface {
         if(!$realInterface){
             Throw "Failed to find interface attached to VMSwitch"
         }
-        return $realInterface
+        return $realInterface[0]
     }
 }
 
@@ -678,7 +736,6 @@ function Confirm-LocalIP {
 }
 
 function Get-DataPortFromDataNetwork {
-
     $dataNetwork = Get-JujuCharmConfig -Scope "os-data-network"
     if (!$dataNetwork) {
         Write-JujuInfo "os-data-network is not defined"
@@ -794,7 +851,7 @@ function Start-ConfigureVMSwitch {
 }
 
 function Download-File {
-     param(
+    Param(
         [Parameter(Mandatory=$true)]
         [string]$url
     )
@@ -921,7 +978,7 @@ function Disable-Service {
 }
 
 function Enable-Service {
-     param(
+    Param(
         [Parameter(Mandatory=$true)]
         [string]$ServiceName
     )
@@ -1102,6 +1159,11 @@ function Restart-Nova {
     Start-Service $services.nova.service
 }
 
+function Stop-Nova {
+    $services = Get-CharmServices
+    Stop-Service $services.nova.service
+}
+
 function Stop-Neutron {
     $services = Get-CharmServices
     Stop-Service $services.neutron.service
@@ -1114,6 +1176,32 @@ function Import-CloudbaseCert {
         return $false
     }
     Import-Certificate $crt -StoreLocation LocalMachine -StoreName TrustedPublisher
+}
+
+function Start-WSFCRelationJoinedHook {
+    $ctx = Get-ActiveDirectoryContext
+    if(!$ctx.Count -or !(Confirm-IsInDomain $ctx["domainName"])) {
+        Set-ClusterableStatus -Ready 0 -Relation "failover-cluster"
+        return
+    }
+
+    if (Get-IsNanoServer) {
+        Install-WindowsFeatures -Features @('FailoverCluster-NanoServer')
+    } else {
+        Install-WindowsFeature -Name 'File-Services','Failover-Clustering' -IncludeManagementTools
+    }
+    Set-ClusterableStatus -Ready 1 -Relation "failover-cluster"
+}
+
+function Start-WSFCRelationChangedHook {
+    $wsfcCtxt = Get-WSFCContext
+    if(!$wsfcCtxt.Count) {
+        Write-JujuLog "WSFC context is not ready"
+        return
+    }
+
+    $computername = [System.Net.Dns]::GetHostName()
+    Write-JujuLog "$computername is clustered"
 }
 
 function Start-ConfigChangedHook {
@@ -1147,31 +1235,28 @@ function Start-ConfigChangedHook {
 }
 
 function Start-InstallHook {
-    PROCESS {
-        if(!(Get-IsNanoServer)){
-            try {
-                Set-MpPreference -DisableRealtimeMonitoring $true
-            } catch {
-                # No need to error out the hook if this fails.
-                Write-JujuWarning "Failed to disable antivirus: $_"
-            }
-        }
-        # Set machine to use high performance settings.
+    if(!(Get-IsNanoServer)){
         try {
-            Set-PowerProfile -PowerProfile Performance
+            Set-MpPreference -DisableRealtimeMonitoring $true
         } catch {
             # No need to error out the hook if this fails.
-            Write-JujuWarning "Failed to set power scheme."
+            Write-JujuWarning "Failed to disable antivirus: $_"
         }
-        Install-Prerequisites
-        Start-TimeResync
-        Import-CloudbaseCert
-        Start-ConfigureVMSwitch
-        $installerPath = Get-NovaInstaller
-        Install-Nova -InstallerPath $installerPath
-        Confirm-ServicePrerequisites
-        Start-ConfigureNeutronAgent
-    }    
+    }
+    # Set machine to use high performance settings.
+    try {
+        Set-PowerProfile -PowerProfile Performance
+    } catch {
+        # No need to error out the hook if this fails.
+        Write-JujuWarning "Failed to set power scheme."
+    }
+    Install-Prerequisites
+    Start-TimeResync
+    Import-CloudbaseCert
+    Start-ConfigureVMSwitch
+    $installerPath = Get-NovaInstaller
+    Install-Nova -InstallerPath $installerPath
+    Confirm-ServicePrerequisites
+    Start-ConfigureNeutronAgent
+    Enable-MSiSCSI
 }
-
-Export-ModuleMember -Function "Start-ConfigChangedHook","Start-InstallHook","Restart-Nova","Restart-Neutron","Stop-Neutron" -Variable JujuCharmServices

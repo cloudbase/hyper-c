@@ -35,7 +35,7 @@ Describe "Test Confirm-ContextComplete" {
         Confirm-ContextComplete -Context $ctx | Should Be $false
 
         $ctx = @{
-            "test" = $false;
+            "test" = $null;
             "test2" = "test";
         }
         Confirm-ContextComplete -Context $ctx | Should Be $false
@@ -233,9 +233,9 @@ Describe "Test Set-JujuRelation"{
             Param (
                 [array]$Command
             )
-            $expect = @("relation-set.exe", "name='value'")
-            if ((Compare-Object $Command $expect)) {
-                Throw "Invalid parameters"
+            $expect = @("relation-set.exe", "--file")
+            if ((Compare-Object $Command[0..1] $expect) -or !(Test-Path $Command[-1])) {
+                Throw ("Invalid parameters: {0}" -f ($Command -Join " "))
             }
         }
 
@@ -259,9 +259,9 @@ Describe "Test Set-JujuRelation"{
             Param (
                 [array]$Command
             )
-            $expect = @("relation-set.exe", "-r", "amqp:1", "name='value'")
-            if ((Compare-Object $Command $expect)) {
-                Throw "Invalid parameters"
+            $expect = @("relation-set.exe", "-r", "amqp:1", "--file")
+            if ((Compare-Object $Command[0..3] $expect) -or !(Test-Path $Command[-1])) {
+                Throw ("Invalid parameters: {0}" -f ($Command -Join " "))
             }
         }
         It "Should pass relationID" {
@@ -276,32 +276,6 @@ Describe "Test Set-JujuRelation"{
         }
     }
 
-    Context "Call Set-JujuRelation with multiple settings"{
-        Mock Invoke-JujuCommand -ModuleName JujuHooks {
-            Param (
-                [array]$Command
-            )
-            $expect = @("relation-set.exe", "name='value'", "integer='111'")
-            if ((Compare-Object $Command $expect)) {
-                Throw "Invalid parameters"
-            }
-        }
-        It "Should pass in multiple settings" {
-            $params = @{
-                "name"="value";
-                "integer"=111;
-            }
-            $env:JUJU_RELATION_ID = "amqp:1"
-            Set-JujuRelation -Settings $params | Should Be $true
-        }
-        It "Should throw an exception (Missing relation ID)" {
-            $params = @{
-                "name"="value";
-                "integer"=111;
-            }
-            { Set-JujuRelation -Settings $params } | Should Throw
-        }
-    }
 }
 
 Describe "Test Get-JujuRelationIds" {
@@ -1257,10 +1231,10 @@ Describe "Test Set-CharmState" {
         $p = "HKCU:\Software\Juju-Charms"
         (Test-Path -Path $p) | Should Be $false
         Set-CharmState -Namespace "active-directory" -Key "username" -Value "guest" | Should BeNullOrEmpty
-        $fullKey = "active-directoryusername"
-        (Test-Path -Path $p) | Should Be $true
-        $k = (Get-ItemProperty -Path $p -Name $fullKey)
-        (Select-Object -InputObject $k -ExpandProperty $fullKey) | Should Be "guest"
+        $keyPath = Join-Path $p "active-directory"
+        (Test-Path -Path $keyPath) | Should Be $true
+        $k = (Get-ItemProperty -Path $keyPath -Name "username")
+        (Select-Object -InputObject $k -ExpandProperty "username") | Should Be (ConvertTo-Yaml "guest")
     }
 }
 

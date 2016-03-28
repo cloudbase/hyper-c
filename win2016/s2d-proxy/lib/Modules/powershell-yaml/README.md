@@ -117,4 +117,19 @@ Name                           Value
 ----                           -----
 goodbye                        world
 second                         document
-``` 
+```
+
+## Running the tests.
+
+Before running the associated unit tests; please make sure you have
+[Pester](https://github.com/pester/pester) installed, as it is the testing
+framework of choice.
+
+After Pester is up and running, the tests may be ran by simply entering the
+tests directory and running `Invoke-Pester`:
+
+```
+PS C:\> git clone https://github.com/cloudbase/powershell-yaml.git $HOME\powershell-yaml
+PS C:\> cd $HOME\powershell-yaml
+PS C:\Users\Guest\powershell-yaml> powershell.exe -NonInteractive -Command {Invoke-Pester}
+```

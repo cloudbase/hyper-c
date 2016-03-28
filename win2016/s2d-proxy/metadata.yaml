@@ -1,15 +1,16 @@
 name: s2d-proxy
-summary: Microsoft Storage Spaces Direct charm
+summary: Microsoft Storage Spaces Direct proxy charm
 maintainer: |
   Gabriel Samfira <gsamfira@cloudbasesolutions.com>
 description: |
-  Storage spaces direct
+  Storage spaces direct proxy charm
 categories:
   - windows
 provides:
   s2d:
     interface: s2d
+  smb-share:
+    interface: fileserver
 requires:
   ad-join:
     interface: ad-join
-
