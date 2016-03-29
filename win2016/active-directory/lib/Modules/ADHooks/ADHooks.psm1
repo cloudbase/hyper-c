@@ -470,9 +470,11 @@ function Prepare-ADInstall {
 
     $netbiosName = Convert-JujuUnitNameToNetbios
     $shouldReboot = $false
-    if ($computername -ne $netbiosName) {
+    $hostnameChanged = Get-CharmState -Namespace "Common" -Key "HostnameChanged"
+    if (!($hostnameChanged) -and ($computername -ne $netbiosName)) {
         Write-JujuWarning ("Changing computername from {0} to {1}" -f @($computername, $netbiosName))
         Rename-Computer -NewName $netbiosName
+        Set-CharmState -Namespace "Common" -Key "HostnameChanged" -Value "True"
         $shouldReboot = $true
     }
     if((Install-Certificate)) {
@@ -1178,12 +1180,8 @@ function Set-ADUserAvailability {
             if($blob){
                 # a blob has already been generated. we send it again
                 $settings[$djoinKey] = $blob
-            } else {
-                # This computer is already part of this domain, but there is no djoin blob
-                # associated with this machine. This may happen id the computer is manually added
-                # we send a flag to let it know, not to expect a djoin-blob
-                $settings["already-joined"] = $true
             }
+            $settings["already-joined"] = $true
         }
     } 
 
@@ -1205,6 +1203,21 @@ function Set-ADUserAvailability {
 
 function Start-ADRelationDepartedHook {
     $compName = Get-JujuRelation -Attr "computername"
+    $currentRelationId = Get-JujuRelationId
+    $rids = Get-JujuRelationIds -Relation 'ad-join'
+    foreach($rid in $rids) {
+        if ($rid -eq $currentRelationId) {
+            continue
+        }
+        $units = Get-JujuRelatedUnits -RelationId $rid
+        foreach($unit in $units) {
+            $computername = Get-JujuRelation -RelationId $rid -Unit $unit -Attribute 'computername'
+            if ($compName -eq $computername) {
+                Write-JujuInfo "Computer $compName still needs to be joined to AD"
+                return
+            }
+        }
+    }
     $blobName = ("djoin-" + $compName)
     if ($compName){
         $blob = GetBlob-FromLeader -Name $blobName
