@@ -376,11 +376,16 @@ function New-RelationSMBShare {
         [Parameter(Mandatory=$true)]
         [Microsoft.Management.Infrastructure.CimSession]$Session
     )
-    New-SmbShare -Name $Name -Path $SharePath -CimSession $Session | Out-Null
+    $share = Get-SmbShare -Name $Name -ErrorAction SilentlyContinue
+    if ($share) {
+        Write-JujuWarning "Share was already created."
+        return
+    }
+    New-SmbShare -Name $Name -Path $SharePath -CimSession $Session -ErrorAction Stop | Out-Null
     foreach($account in $Accounts) {
         try {
             Grant-SmbShareAccess -Name $Name -AccountName $account -AccessRight Full `
-                                 -Force -Confirm:$false -CimSession $Session | Out-Null
+                                 -Force -Confirm:$false -CimSession $Session -ErrorAction Stop | Out-Null
         } catch {
             Write-JujuError "Failed to grant access on $Name to $account"
         }
@@ -406,19 +411,28 @@ function Start-SMBShareRelationChanged {
     }
     $s2dNodes = Get-S2DNodes
     $sharePath = Join-Path $volumepath $smbCtxt["share-name"]
-    Invoke-Command -ComputerName $s2dNodes[0] -ScriptBlock {
-        Param($sharePath)
-        if (!(Test-Path $sharePath)) {
-            mkdir $sharePath | Out-Null
-        }
-    } -ArgumentList $sharePath
+    Start-ExecuteWithRetry {
+        Invoke-Command -ComputerName $s2dNodes[0] -ScriptBlock {
+            Param($sharePath)
+            if (!(Test-Path $sharePath)) {
+                mkdir $sharePath | Out-Null
+            }
+        } -ArgumentList $sharePath -ErrorAction Stop
+    }
     $session = Get-NewCimSession -Nodes $s2dNodes
     New-RelationSMBShare -Name $smbCtxt["share-name"] -Accounts @($smbCtxt["computer-group"]) `
                          -SharePath $sharePath -Session $session
-    Invoke-Command -ComputerName $s2dNodes[0] -ScriptBlock {
-        Param($shareName)
-        Set-SmbPathAcl -ShareName $shareName
-    } -ArgumentList $smbCtxt["share-name"]
+    Start-ExecuteWithRetry {
+        Invoke-Command -ComputerName $s2dNodes[0] -ScriptBlock {
+            Param($shareName, $account)
+            $sharesPath = (Get-SmbShare -Name $shareName).Path
+            $permissions = "{0}:(OI)(CI)(F)" -f $account
+            icacls.exe $sharesPath /grant $permissions /T /C | Out-Null
+            if ($LASTEXITCODE) {
+                Throw "Exit code: $LASTEXITCODE"
+            }
+        } -ArgumentList @($smbCtxt["share-name"], $smbCtxt['computer-group']) -ErrorAction Stop
+    }
 
     $rids = Get-JujuRelationIds -Relation 'smb-share'
     $scaleoutDNSName = Get-JujuCharmConfig -Scope 'scaleout-name'

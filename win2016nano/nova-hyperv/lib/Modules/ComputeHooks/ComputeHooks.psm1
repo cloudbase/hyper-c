@@ -1250,6 +1250,15 @@ function Start-InstallHook {
         # No need to error out the hook if this fails.
         Write-JujuWarning "Failed to set power scheme."
     }
+    $netbiosName = Convert-JujuUnitNameToNetbios
+    $computername = [System.Net.Dns]::GetHostName()
+    $hostnameChanged = Get-CharmState -Namespace "Common" -Key "HostnameChanged"
+    if (!($hostnameChanged) -and ($computername -ne $netbiosName)) {
+        Write-JujuWarning ("Changing computername from {0} to {1}" -f @($computername, $netbiosName))
+        Rename-Computer -NewName $netbiosName
+        Set-CharmState -Namespace "Common" -Key "HostnameChanged" -Value "True"
+        Invoke-JujuReboot -Now
+    }
     Install-Prerequisites
     Start-TimeResync
     Import-CloudbaseCert

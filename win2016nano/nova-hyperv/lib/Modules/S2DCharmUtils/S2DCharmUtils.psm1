@@ -14,6 +14,7 @@ function Start-S2DRelationJoinedHook {
         Write-JujuLog "Delaying the S2D relation changed hook until AD context is ready"
         return
     }
+
     $wsfcCtxt = Get-WSFCContext
     if (!$wsfcCtxt.Count) {
         Write-JujuLog "Delaying the S2D relation changed hook until WSFC context is ready"
