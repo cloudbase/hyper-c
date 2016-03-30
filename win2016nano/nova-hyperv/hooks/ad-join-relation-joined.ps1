@@ -9,8 +9,9 @@ Import-Module JujuUtils
 Import-Module JujuHooks
 
 function Get-AdUserAndGroup {
+    $adUser = Get-JujuCharmConfig -Scope 'ad-user'
     $creds = @{
-        "nova-hyperv"=@(
+        $adUser=@(
             "CN=Domain Admins,CN=Users"
         );
     }
@@ -21,7 +22,8 @@ function Get-AdUserAndGroup {
 try {
     Import-Module ADCharmUtils
 
-    $adGroup = "CN=Nova,OU=OpenStack"
+    $group = Get-JujuCharmConfig -Scope 'ad-computer-group'
+    $adGroup = "CN=$group,OU=OpenStack"
     $encGr = ConvertTo-Base64 $adGroup
     $adUser = Get-AdUserAndGroup
 

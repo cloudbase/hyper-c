@@ -16,6 +16,14 @@ options:
       - juno
       - kilo
       - liberty
+  ad-computer-group:
+    type: string
+    default: "Nova"
+    description: "Computer group that will be joined after adding AD relation"
+  ad-user:
+    type: string
+    default: "nova-hyperv"
+    description: "User that will created after adding AD relation"
   installer-url:
     type: string
     default: ""
