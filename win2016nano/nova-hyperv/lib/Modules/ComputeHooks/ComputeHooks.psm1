@@ -450,6 +450,7 @@ function Get-S2DContext {
         if($s2dCtxt["volumepath"] -and (Test-Path $s2dCtxt["volumepath"])){
             $ctxt["instances_dir"] = $s2dCtxt["volumepath"]
             $enableCluster = Get-JujuCharmConfig -Scope 'enable-cluster-driver'
+            $version = Get-OpenstackVersion
             if ($distro_urls[$version]['cluster'] -and $enableCluster) {
                 $ctxt['compute_driver'] = 'hyperv.nova.cluster.driver.HyperVClusterDriver'
             } else {
