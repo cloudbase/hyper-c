@@ -376,7 +376,7 @@ function New-RelationSMBShare {
         [Parameter(Mandatory=$true)]
         [Microsoft.Management.Infrastructure.CimSession]$Session
     )
-    $share = Get-SmbShare -Name $Name -ErrorAction SilentlyContinue
+    $share = Get-SmbShare -Name $Name -CimSession $Session -ErrorAction SilentlyContinue
     if ($share) {
         Write-JujuWarning "Share was already created."
         return
