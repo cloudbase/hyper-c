@@ -82,7 +82,6 @@ function Install-Prerequisites {
         }
     }
     Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Management-PowerShell -All -NoRestart
-    Import-Module hyper-v
 }
 
 function Get-OpenstackVersion {
@@ -448,9 +447,9 @@ function Get-S2DContext {
     $s2dCtxt = Get-JujuRelationContext -Relation "s2d" -RequiredContext $required
     if($s2dCtxt.Count){
         if($s2dCtxt["volumepath"] -and (Test-Path $s2dCtxt["volumepath"])){
-            $ctxt["instances_dir"] = $s2dCtxt["volumepath"]
+            $ctxt["instances_dir"] = Join-Path $s2dCtxt["volumepath"] "Instances"
             $enableCluster = Get-JujuCharmConfig -Scope 'enable-cluster-driver'
-            $version = Get-OpenstackVersion
+            $version = Get-JujuCharmConfig -Scope 'openstack-version'
             if ($distro_urls[$version]['cluster'] -and $enableCluster) {
                 $ctxt['compute_driver'] = 'hyperv.nova.cluster.driver.HyperVClusterDriver'
             } else {
@@ -490,6 +489,7 @@ function Get-NeutronContext {
     $optionalCtx = @{
         "neutron_url"=$null;
         "quantum_url"=$null;
+        "api_version"=$null;
     }
 
     $ctx = Get-JujuRelationContext -Relation 'cloud-compute' -RequiredContext $required -OptionalContext $optionalCtx
@@ -502,10 +502,14 @@ function Get-NeutronContext {
     if(!$ctx["neutron_url"]){
         $ctx["neutron_url"] = $ctx["quantum_url"]
     }
+    if(!$ctx["api_version"] -or $ctx["api_version"] -eq 2) {
+        $ctx["api_version"] = "2.0"
+    }
+
     $ctx["neutron_auth_strategy"] = "keystone"
     $ctx["log_dir"] = $logdir
     $ctx["vmswitch_name"] = $switchName
-    $ctx["neutron_admin_auth_url"] =  "{0}://{1}:{2}/v2.0" -f @($ctx["auth_protocol"], $ctx['auth_host'], $ctx['auth_port'])
+    $ctx["neutron_admin_auth_url"] =  "{0}://{1}:{2}/v{3}" -f @($ctx["auth_protocol"], $ctx['auth_host'], $ctx['auth_port'], $ctx["api_version"])
     $ctx["local_ip"] = (Get-CharmState -Namespace "novahyperv" -Key "local_ip")
     return $ctx
 }
@@ -1167,7 +1171,11 @@ function Stop-Nova {
 
 function Stop-Neutron {
     $services = Get-CharmServices
-    Stop-Service $services.neutron.service
+    if ($net_type -eq "hyperv"){
+        Stop-Service $services.neutron.service
+    } elseif ($net_type -eq "ovs") {
+        Stop-Service $services['neutron-ovs']['service']
+    }
 }
 
 function Import-CloudbaseCert {
@@ -1235,6 +1243,29 @@ function Start-ConfigChangedHook {
     }
 }
 
+function Set-InsecureGuestAuth {
+    $osVersion = [version](Get-ManagementObject -ClassName win32_operatingsystem).Version
+    if ($osVersion.Major -ne 10) {
+        # This is needed only on OS versions >= 10
+        # http://answers.microsoft.com/en-us/insider/forum/insider_wintp-insider_web/the-account-is-not-authorized-to-login-from-this/5aa0c61d-7e27-41ce-b1cd-1bedbe5c5ead
+        return
+    }
+    $namespace = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
+    $shouldReboot = $false
+    $ret =  Get-ItemProperty -Path $namespace -Name "AllowInsecureGuestAuth" -ErrorAction SilentlyContinue
+    if (!$ret) {
+        New-ItemProperty -Path $namespace -Name "AllowInsecureGuestAuth" -Value 1 | Out-Null
+        $shouldReboot = $true
+    } else {
+        if ($ret.AllowInsecureGuestAuth -ne 1) {
+            Set-ItemProperty -Path $namespace -Name "AllowInsecureGuestAuth" -Value 1 | Out-Null
+            $shouldReboot = $true
+        }
+    }
+    return $shouldReboot
+}
+
+
 function Start-InstallHook {
     if(!(Get-IsNanoServer)){
         try {
@@ -1254,11 +1285,12 @@ function Start-InstallHook {
     $netbiosName = Convert-JujuUnitNameToNetbios
     $computername = [System.Net.Dns]::GetHostName()
     $hostnameChanged = Get-CharmState -Namespace "Common" -Key "HostnameChanged"
+    $shouldReboot = $false
     if (!($hostnameChanged) -and ($computername -ne $netbiosName)) {
         Write-JujuWarning ("Changing computername from {0} to {1}" -f @($computername, $netbiosName))
         Rename-Computer -NewName $netbiosName
         Set-CharmState -Namespace "Common" -Key "HostnameChanged" -Value "True"
-        Invoke-JujuReboot -Now
+        $shouldReboot = $true
     }
     Install-Prerequisites
     Start-TimeResync
@@ -1269,4 +1301,8 @@ function Start-InstallHook {
     Confirm-ServicePrerequisites
     Start-ConfigureNeutronAgent
     Enable-MSiSCSI
+    $rebootNeeded = Set-InsecureGuestAuth
+    if ($shouldReboot -or $rebootNeeded) {
+        Invoke-JujuReboot -Now
+    }
 }

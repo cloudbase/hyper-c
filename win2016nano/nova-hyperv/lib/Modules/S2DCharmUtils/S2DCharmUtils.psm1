@@ -14,16 +14,29 @@ function Start-S2DRelationJoinedHook {
         Write-JujuLog "Delaying the S2D relation changed hook until AD context is ready"
         return
     }
-
     $wsfcCtxt = Get-WSFCContext
     if (!$wsfcCtxt.Count) {
         Write-JujuLog "Delaying the S2D relation changed hook until WSFC context is ready"
         return
     }
 
-    Get-Disk | Where-Object {
-        $_.IsBoot -eq $false -and $_.IsSystem -eq $false
-    } | Clear-Disk -RemoveData -RemoveOEM -Confirm:$false -ErrorAction SilentlyContinue
+    $extraDisks = Get-Disk | Where-Object { $_.Number -ne $null -and
+                                            $_.IsBoot -eq $false -and
+                                            $_.IsSystem -eq $false }
+    if($extraDisks) {
+        $offline = $extraDisks | Where-Object { $_.IsOffline -eq $true }
+        if($offline) {
+            Set-Disk -InputObject $offline -IsOffline:$False
+        }
+        $readonly = $extraDisks | Where-Object { $_.IsReadOnly -eq $true }
+        if($readonly){
+            Set-Disk -InputObject $readonly -IsReadOnly:$False
+        }
+        $initializedDisks = $extraDisks | Where-Object { $_.PartitionStyle -ne "RAW" }
+        if($initializedDisks) {
+            Clear-Disk -InputObject $initializedDisks -RemoveData -RemoveOEM -Confirm:$false
+        }
+    }
 
     $computername = [System.Net.Dns]::GetHostName()
     $settings = @{
