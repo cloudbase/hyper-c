@@ -1,0 +1,3 @@
+restart-services:
+  description: Restart Nova and Neutron services
+  additionalProperties: false
