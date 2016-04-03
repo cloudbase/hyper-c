@@ -99,6 +99,7 @@ function Enable-S2D {
     if($cluster.DASModeEnabled -eq 1){
         return $true
     }
+    Write-JujuInfo "Enabling Storage Spaces Direct"
     Enable-ClusterStorageSpacesDirect -Cluster ($clusterName + "." + $Domain)
     return $true
 }
@@ -410,6 +411,10 @@ function Start-SMBShareRelationChanged {
         return
     }
     $s2dNodes = Get-S2DNodes
+    if(!$s2dNodes.Count) {
+        Write-JujuWarning "No S2D nodes yet"
+        return
+    }
     $sharePath = Join-Path $volumepath $smbCtxt["share-name"]
     Start-ExecuteWithRetry {
         Invoke-Command -ComputerName $s2dNodes[0] -ScriptBlock {
