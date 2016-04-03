@@ -1,4 +1,12 @@
 options:
+  debug:
+    type: boolean
+    default: False
+    description: "Enable debug logging"
+  verbose:
+    type: boolean
+    default: False
+    description: "Enable verbose logging"
   openstack-origin:
     type: string
     default: liberty

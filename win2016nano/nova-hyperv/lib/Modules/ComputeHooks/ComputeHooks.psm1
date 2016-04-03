@@ -455,11 +455,10 @@ function Get-S2DContext {
             } else {
                 $ctxt['compute_driver'] = 'hyperv.nova.driver.HyperVDriver'
             }
-            return $ctxt
+        } else {
+            Write-JujuWarning "Relation information states that an s2d volume should be present, but could not be found locally."
         }
-        Write-JujuWarning "Relation information states that an s2d volume should be present, but could not be found locally."
     }
-    # If we get here, it means there was no volumepath
     if (!(Test-Path $ctxt["instances_dir"])) {
         mkdir $ctxt["instances_dir"]
     }
@@ -1250,16 +1249,21 @@ function Set-InsecureGuestAuth {
         # http://answers.microsoft.com/en-us/insider/forum/insider_wintp-insider_web/the-account-is-not-authorized-to-login-from-this/5aa0c61d-7e27-41ce-b1cd-1bedbe5c5ead
         return
     }
-    $namespace = "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
     $shouldReboot = $false
-    $ret =  Get-ItemProperty -Path $namespace -Name "AllowInsecureGuestAuth" -ErrorAction SilentlyContinue
-    if (!$ret) {
-        New-ItemProperty -Path $namespace -Name "AllowInsecureGuestAuth" -Value 1 | Out-Null
-        $shouldReboot = $true
-    } else {
-        if ($ret.AllowInsecureGuestAuth -ne 1) {
-            Set-ItemProperty -Path $namespace -Name "AllowInsecureGuestAuth" -Value 1 | Out-Null
+    $namespaces = @(
+        "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters",
+        "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters"
+    )
+    foreach($namespace in $namespaces) {
+        $ret =  Get-ItemProperty -Path $namespace -Name "AllowInsecureGuestAuth" -ErrorAction SilentlyContinue
+        if (!$ret) {
+            New-ItemProperty -Path $namespace -Name "AllowInsecureGuestAuth" -Value 1 | Out-Null
             $shouldReboot = $true
+        } else {
+            if ($ret.AllowInsecureGuestAuth -ne 1) {
+                Set-ItemProperty -Path $namespace -Name "AllowInsecureGuestAuth" -Value 1 | Out-Null
+                $shouldReboot = $true
+            }
         }
     }
     return $shouldReboot
