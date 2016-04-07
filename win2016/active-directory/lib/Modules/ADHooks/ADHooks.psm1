@@ -1067,9 +1067,7 @@ function GetBlob-FromLeader {
         [string]$Name
     )
     $blob = Get-LeaderData -Attr $Name
-    if($blob -ne "Nil"){
-        return $blob
-    }
+    return $blob
 }
 
 function SetBlob-ToLeader {
@@ -1124,13 +1122,7 @@ function Create-DjoinData {
 
     if((Test-Path $blobFile)){
         $c = Convert-FileToBase64 $blobFile
-        $blob = GetBlob-FromLeader -Name $blobName
-        if($blob -and $blob -ne $c){
-            # Stale local blob file
-            $ret = rm -Force $blobFile
-            return $blob
-        }
-        $ret = SetBlob-ToLeader -Name $blobName -Blob $c
+        SetBlob-ToLeader -Name $blobName -Blob $c | Out-Null
         return $c
     }
 
@@ -1175,15 +1167,16 @@ function Set-ADUserAvailability {
             }
             $settings[$djoinKey] = $blob
             $settings["already-joined"] = $false
-        }else {
+        } else {
             $blob = GetBlob-FromLeader -Name $djoinKey
-            if($blob){
+            if(!$blob){
                 # a blob has already been generated. we send it again
-                $settings[$djoinKey] = $blob
+                Throw "Failed to get blob information"
             }
+            $settings[$djoinKey] = $blob
             $settings["already-joined"] = $true
         }
-    } 
+    }
 
     if ($adUsersEnc) {
         $adUsers = Get-UnmarshaledObject $adUsersEnc
@@ -1191,10 +1184,11 @@ function Set-ADUserAvailability {
         $encCreds = Get-MarshaledObject $creds
         $settings["adcredentials"] = $encCreds
     }
-    
+
     if($settings.Count -gt 0){
-        Set-JujuRelation -relation_settings $settings    
+        Set-JujuRelation -Settings $settings
     }
+
     if ($computerGroup -and $compName) {
         AddTo-ComputerADGroup $compName $computerGroup
     }
