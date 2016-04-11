@@ -19,7 +19,8 @@ $WINDOWS_FEATURES = @( 'AD-Domain-Services',
                        'RSAT-ADDS-Tools',
                        'RSAT-AD-AdminCenter',
                        'DNS',
-                       'RSAT-DNS-Server' )
+                       'RSAT-DNS-Server',
+                       'GPMC')
 
 $ADUserSection = "ADCharmUsers"
 
@@ -114,12 +115,12 @@ function CreateNew-ADOU {
     )
 
     Write-JujuInfo "Creating Organizational Unit..."
-    $Path = $Path.trim(",")
     $tmp = "OU=" + $OUName + "," + $Path
     $ou = Get-ADOrganizationalUnit -Filter {DistinguishedName -eq $tmp}
     if (!$ou) {
-        $ou = New-ADOrganizationalUnit -Name $OUName -Path $Path
+        New-ADOrganizationalUnit -Name $OUName -Path $Path
     }
+    $ou = Get-ADOrganizationalUnit -Filter {DistinguishedName -eq $tmp}
     return $ou
 }
 
@@ -145,7 +146,8 @@ function CreateNew-ADGroup {
         $adTypeValue= $s[1].replace('"', "")
         if ($adType -eq "OU") {
             Write-JujuInfo ("Creating {0}" -f $s[1])
-            $ou = CreateNew-ADOU $adTypeValue ($tmp + "," + $dn)
+            $ou = CreateNew-ADOU $adTypeValue $dn
+            Set-GPInheritance -Target "OU=$adTypeValue,$dn" -IsBlocked Yes
         } elseif ($adType -eq "CN") {
             $groupName = $adTypeValue
         }
@@ -1088,14 +1090,16 @@ function RemoveBlob-FromLeader {
         [string]$Name
     )
     if((Confirm-Leader)) {
-        Set-LeaderData @{$Name="Nil";}
+        Set-LeaderData @{$Name=$null;}
     }
 }
 
 function Create-DjoinData {
     Param(
         [Parameter(Mandatory=$true)]
-        [string]$computername
+        [string]$computername,
+        [Parameter(Mandatory=$false)]
+        [string]$ou
     )
     $blobName = ("djoin-" + $computername)
 
@@ -1128,10 +1132,17 @@ function Create-DjoinData {
 
     $domain = Get-JujuCharmConfig -Scope 'domain-name'
     $cmd = @("djoin.exe", "/provision", "/domain", $domain, "/machine", $computername, "/savefile", $blobFile)
+    if($ou) {
+        $cmd += "/machineou"
+        $cmd += $ou
+    }
     try {
         Invoke-JujuCommand -Command $cmd | Out-Null
         $blob = Convert-FileToBase64 $blobFile
         SetBlob-ToLeader -Name $blobName -Blob $blob | Out-Null
+    } catch {
+        Write-JujuWarning ("Failed to create djoin data: {0}" -f $_.Exception.Message)
+        Throw $_
     } finally {
         rm -Force $blobFile | out-null
     }
@@ -1147,11 +1158,11 @@ function Set-ADUserAvailability {
     $settings = @{}
     $adUsersEnc = Get-JujuRelation -Attr "adusers"
     $computerGroupEnc = Get-JujuRelation -Attr "computerGroup"
-
     if ($computerGroupEnc) {
         $computerGroup = ConvertFrom-Base64 $computerGroupEnc
     }
     $compName = Get-JujuRelation -Attr "computername"
+    $ouName = Get-JujuRelation -Attribute "ou-name"
 
     if ($compName){
         try {
@@ -1161,20 +1172,26 @@ function Set-ADUserAvailability {
         }
         $djoinKey = ("djoin-" + $compName)
         if(!$isInAD){
-            $blob = Create-DjoinData $compName
+            Write-JujuWarning "Creating djoin blob for $compName"
+            if ($ouName) {
+                $dn = (Get-ADDomain).DistinguishedName
+                CreateNew-ADOU $ouName $dn
+                $blob = Create-DjoinData $compName "OU=$ouName,$dn"
+            } else {
+                $blob = Create-DjoinData $compName
+            }
             if(!$blob){
                 Throw "Failed to generate domain join information"
             }
             $settings[$djoinKey] = $blob
-            $settings["already-joined"] = $false
+            $settings["already-joined-$compName"] = $false
         } else {
             $blob = GetBlob-FromLeader -Name $djoinKey
-            if(!$blob){
+            if($blob){
                 # a blob has already been generated. we send it again
-                Throw "Failed to get blob information"
+                $settings[$djoinKey] = $blob
             }
-            $settings[$djoinKey] = $blob
-            $settings["already-joined"] = $true
+            $settings["already-joined-$compName"] = $true
         }
     }
 
