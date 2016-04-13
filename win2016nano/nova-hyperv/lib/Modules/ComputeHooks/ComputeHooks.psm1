@@ -1281,6 +1281,23 @@ function Set-InsecureGuestAuth {
     return $shouldReboot
 }
 
+function Remove-UnhealthyStoragePools {
+    # NOTE(ibalutoiu):
+    #     On TP5, after you reinstall the OS and you still have the extra disks that
+    #     formed a storage pool before, this one is listed with "Unknown" status and
+    #     read-only mode. After disabling read-only flag, the storage pool becomes
+    #     "Unhealthy" and it's unusable. Thus we need to delete them before
+    #     using the charm for storage spaces direct.
+    $unknownReadOnly = Get-StoragePool | Where-Object { ($_.HealthStatus -eq "Unknown") -and ($_.IsReadOnly -eq $true) }
+    foreach($pool in $unknownReadOnly) {
+        Set-StoragePool -InputObject $pool -IsReadOnly $false
+    }
+    $unhealthyReadOnly = Get-StoragePool | Where-Object { $_.HealthStatus -eq "Unhealthy" }
+    foreach($pool in $unknownReadOnly) {
+        Remove-StoragePool -InputObject $pool -Confirm:$false
+    }
+}
+
 function Start-InstallHook {
     if(!(Get-IsNanoServer)){
         try {
@@ -1319,6 +1336,7 @@ function Start-InstallHook {
     if ($hostnameReboot -or $flagReboot -or $prereqReboot) {
         Invoke-JujuReboot -Now
     }
+    Remove-UnhealthyStoragePools
 }
 
 function Start-ADJoinRelationChangedHook {

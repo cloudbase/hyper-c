@@ -12,8 +12,7 @@ $COMPUTERNAME = [System.Net.Dns]::GetHostName()
 
 
 function Clear-ExtraDisks {
-    $extraDisks = Get-Disk | Where-Object { $_.Number -ne $null -and
-                                            $_.IsBoot -eq $false -and
+    $extraDisks = Get-Disk | Where-Object { $_.IsBoot -eq $false -and
                                             $_.IsSystem -eq $false }
     if($extraDisks) {
         $offline = $extraDisks | Where-Object { $_.IsOffline -eq $true }
