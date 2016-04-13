@@ -8,9 +8,7 @@ Import-Module JujuLogging
 
 try {
     Import-Module ComputeHooks
-    Import-Module S2DCharmUtils
 
-    Start-S2DRelationJoinedHook
     Start-ConfigChangedHook
 } catch {
     Write-HookTracebackToLog $_

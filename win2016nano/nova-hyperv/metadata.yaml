@@ -10,6 +10,8 @@ tags:
 provides:
   cloud-compute:
     interface: nova-compute
+  ad-info:
+    interface: ad-info
 requires:
   s2d:
     interface: s2d

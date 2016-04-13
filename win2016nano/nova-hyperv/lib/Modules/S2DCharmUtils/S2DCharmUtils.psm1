@@ -8,18 +8,10 @@ Import-Module ADCharmUtils
 Import-Module WSFCCharmUtils
 Import-Module JujuHooks
 
-function Start-S2DRelationJoinedHook {
-    $adCtxt = Get-ActiveDirectoryContext
-    if (!$adCtxt.Count) {
-        Write-JujuLog "Delaying the S2D relation changed hook until AD context is ready"
-        return
-    }
-    $wsfcCtxt = Get-WSFCContext
-    if (!$wsfcCtxt.Count) {
-        Write-JujuLog "Delaying the S2D relation changed hook until WSFC context is ready"
-        return
-    }
+$COMPUTERNAME = [System.Net.Dns]::GetHostName()
 
+
+function Clear-ExtraDisks {
     $extraDisks = Get-Disk | Where-Object { $_.Number -ne $null -and
                                             $_.IsBoot -eq $false -and
                                             $_.IsSystem -eq $false }
@@ -37,11 +29,25 @@ function Start-S2DRelationJoinedHook {
             Clear-Disk -InputObject $initializedDisks -RemoveData -RemoveOEM -Confirm:$false
         }
     }
+}
 
-    $computername = [System.Net.Dns]::GetHostName()
+function Start-S2DRelationJoinedHook {
+    $adCtxt = Get-ActiveDirectoryContext
+    if (!$adCtxt.Count) {
+        Write-JujuLog "Delaying the S2D relation changed hook until AD context is ready"
+        return
+    }
+    $wsfcCtxt = Get-WSFCContext
+    if (!$wsfcCtxt.Count) {
+        Write-JujuLog "Delaying the S2D relation changed hook until WSFC context is ready"
+        return
+    }
+
+    Clear-ExtraDisks
+
     $settings = @{
         'ready' = $true;
-        'computername' = $computername;
+        'computername' = $COMPUTERNAME;
         'joined-cluster-name' = $wsfcCtxt['cluster-name']
     }
     $rids = Get-JujuRelationIds -Relation 's2d'

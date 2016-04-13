@@ -12,6 +12,8 @@ try {
     Import-Module S2DCharmUtils
 
     if(Start-JoinDomain) {
+        Start-ADJoinRelationChangedHook
+        Start-ADInfoRelationJoinedHook
         Start-WSFCRelationJoinedHook
         Start-S2DRelationJoinedHook
         Start-ConfigChangedHook

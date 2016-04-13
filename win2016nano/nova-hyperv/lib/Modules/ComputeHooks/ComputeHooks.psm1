@@ -60,28 +60,39 @@ $distro_urls = @{
     };
 }
 
-function Install-Prerequisites {
-    if ((Get-IsNanoServer)){
-        return $true
-    }
+$COMPUTERNAME = [System.Net.Dns]::GetHostName()
 
+
+function Install-Prerequisites {
+    <#
+    .SYNOPSIS
+    Returns a boolean to indicate if a reboot is needed or not
+    #>
+
+    if (Get-IsNanoServer) {
+        return $false
+    }
+    $rebootNeeded = $false
     try {
-        $needsHyperV = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V
-    }catch{
+        $needsHyperV = Get-WindowsOptionalFeature -Online -FeatureName 'Microsoft-Hyper-V'
+    } catch {
         Throw "Failed to get Hyper-V role status: $_"
     }
-
-    if ($needsHyperV.State -ne "Enabled"){
-        $installHyperV = Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All -NoRestart
-        if ($installHyperV.RestartNeeded){
-            Invoke-JujuReboot -Now
+    if ($needsHyperV.State -ne "Enabled") {
+        $installHyperV = Enable-WindowsOptionalFeature -Online -FeatureName 'Microsoft-Hyper-V' -All -NoRestart
+        if ($installHyperV.RestartNeeded) {
+            $rebootNeeded = $true
         }
-    }else{
-        if ($needsHyperV.RestartNeeded){
-            Invoke-JujuReboot -Now
+    } else {
+        if ($needsHyperV.RestartNeeded) {
+            $rebootNeeded = $true
         }
     }
-    Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Management-PowerShell -All -NoRestart
+    $stat = Enable-WindowsOptionalFeature -Online -FeatureName 'Microsoft-Hyper-V-Management-PowerShell' -All -NoRestart
+    if ($stat.RestartNeeded) {
+        $rebootNeeded = $true
+    }
+    return $rebootNeeded
 }
 
 function Get-OpenstackVersion {
@@ -460,7 +471,19 @@ function Get-S2DContext {
         }
     }
     if (!(Test-Path $ctxt["instances_dir"])) {
-        mkdir $ctxt["instances_dir"]
+        try {
+            mkdir $ctxt["instances_dir"]
+        } catch [System.IO.IOException] {
+            $msg = "An item with the specified name {0} already exists." -f @($ctxt["instances_dir"])
+            if ($_.Exception.Message -eq $msg) {
+                # Sometimes there are races when the 'Test-Path $ctxt["instances_dir"]' passes and
+                # at the exact same time, the directory is created on another unit, 
+                # thus 'mkdir $ctxt["instances_dir"]' throws an exception.
+                Write-JujuLog ("{0} was already created" -f @($ctxt['instances_dir']))
+            } else {
+                Throw $_
+            }
+        }
     }
     return $ctxt
 }
@@ -1201,17 +1224,6 @@ function Start-WSFCRelationJoinedHook {
     Set-ClusterableStatus -Ready 1 -Relation "failover-cluster"
 }
 
-function Start-WSFCRelationChangedHook {
-    $wsfcCtxt = Get-WSFCContext
-    if(!$wsfcCtxt.Count) {
-        Write-JujuLog "WSFC context is not ready"
-        return
-    }
-
-    $computername = [System.Net.Dns]::GetHostName()
-    Write-JujuLog "$computername is clustered"
-}
-
 function Start-ConfigChangedHook {
     Start-ConfigureVMSwitch
     Confirm-ServicePrerequisites
@@ -1269,7 +1281,6 @@ function Set-InsecureGuestAuth {
     return $shouldReboot
 }
 
-
 function Start-InstallHook {
     if(!(Get-IsNanoServer)){
         try {
@@ -1287,16 +1298,15 @@ function Start-InstallHook {
         Write-JujuWarning "Failed to set power scheme."
     }
     $netbiosName = Convert-JujuUnitNameToNetbios
-    $computername = [System.Net.Dns]::GetHostName()
     $hostnameChanged = Get-CharmState -Namespace "Common" -Key "HostnameChanged"
-    $shouldReboot = $false
-    if (!($hostnameChanged) -and ($computername -ne $netbiosName)) {
-        Write-JujuWarning ("Changing computername from {0} to {1}" -f @($computername, $netbiosName))
+    $hostnameReboot = $false
+    if (!($hostnameChanged) -and ($COMPUTERNAME -ne $netbiosName)) {
+        Write-JujuWarning ("Changing computername from {0} to {1}" -f @($COMPUTERNAME, $netbiosName))
         Rename-Computer -NewName $netbiosName
-        Set-CharmState -Namespace "Common" -Key "HostnameChanged" -Value "True"
-        $shouldReboot = $true
+        Set-CharmState -Namespace "Common" -Key "HostnameChanged" -Value $true
+        $hostnameReboot = $true
     }
-    Install-Prerequisites
+    $prereqReboot = Install-Prerequisites
     Start-TimeResync
     Import-CloudbaseCert
     Start-ConfigureVMSwitch
@@ -1305,8 +1315,55 @@ function Start-InstallHook {
     Confirm-ServicePrerequisites
     Start-ConfigureNeutronAgent
     Enable-MSiSCSI
-    $rebootNeeded = Set-InsecureGuestAuth
-    if ($shouldReboot -or $rebootNeeded) {
+    $flagReboot = Set-InsecureGuestAuth
+    if ($hostnameReboot -or $flagReboot -or $prereqReboot) {
         Invoke-JujuReboot -Now
+    }
+}
+
+function Start-ADJoinRelationChangedHook {
+    $adCtxt = Get-ActiveDirectoryContext
+    if(!$adCtxt["adcredentials"]) {
+        Write-JujuWarning "AD user credentials are not already set"
+        return
+    }
+
+    $charmServices = Get-CharmServices
+    $serviceName = $charmServices['nova']['service']
+    Write-JujuInfo "Setting $serviceName AD user"
+
+    $username = $adCtxt["adcredentials"][0]["username"]
+    $pass = $adCtxt["adcredentials"][0]["password"]
+
+    $svcRunning = (Get-Service $serviceName).Status -eq "Running"
+    if ($svcRunning) {
+        Stop-Service $serviceName
+    }
+    Grant-PrivilegesOnDomainUser -Username $username
+    Set-ServiceLogon -Services $serviceName -UserName $username -Password $pass
+    if ($svcRunning) {
+        Start-Service $serviceName
+    }
+}
+
+function Start-ADInfoRelationJoinedHook {
+    $adCtxt = Get-ActiveDirectoryContext
+    if(!$adCtxt.Count -or !$adCtxt["adcredentials"]) {
+        Write-JujuWarning "AD context is not complete yet"
+        return
+    }
+
+    $adUser = $adCtxt["adcredentials"][0]["username"]
+    $adComputer = "{0}\{1}$" -f @($adCtxt['netbiosname'], $COMPUTERNAME)
+    $group = Get-JujuCharmConfig -Scope 'ad-computer-group'
+    $adGroup = "{0}\{1}" -f @($adCtxt['netbiosname'], $group)
+    $relationSettings = @{
+        'ad-computer' = $adComputer;
+        'ad-user' = $adUser;
+        'ad-group' = $adGroup;
+    }
+    $rids = Get-JujuRelationIds 'ad-info'
+    foreach($rid in $rids) {
+        Set-JujuRelation -RelationId $rid -Settings $relationSettings
     }
 }

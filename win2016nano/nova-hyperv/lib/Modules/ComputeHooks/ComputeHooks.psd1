@@ -62,7 +62,8 @@ FunctionsToExport = @(
     "Stop-Neutron",
     "Stop-Nova",
     "Start-WSFCRelationJoinedHook",
-    "Start-WSFCRelationChangedHook")
+    'Start-ADJoinRelationChangedHook',
+    'Start-ADInfoRelationJoinedHook')
 
 # Cmdlets to export from this module
 CmdletsToExport = '*'

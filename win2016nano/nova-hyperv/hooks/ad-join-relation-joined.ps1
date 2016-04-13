@@ -8,6 +8,9 @@ Import-Module JujuLogging
 Import-Module JujuUtils
 Import-Module JujuHooks
 
+$COMPUTERNAME = [System.Net.Dns]::GetHostName()
+
+
 function Get-AdUserAndGroup {
     $adUser = Get-JujuCharmConfig -Scope 'ad-user'
     $creds = @{
@@ -23,14 +26,12 @@ try {
     Import-Module ADCharmUtils
 
     $group = Get-JujuCharmConfig -Scope 'ad-computer-group'
-    $adGroup = "CN=$group,OU=OpenStack"
-    $encGr = ConvertTo-Base64 $adGroup
+    $encGr = ConvertTo-Base64 ("CN={0},OU=OpenStack" -f @($group))
     $adUser = Get-AdUserAndGroup
 
-    $computername = [System.Net.Dns]::GetHostName()
     $relationSettings = @{
         'adusers' = $adUser;
-        'computername' = $computername;
+        'computername' = $COMPUTERNAME;
         "computerGroup" = $encGr;
     }
 
