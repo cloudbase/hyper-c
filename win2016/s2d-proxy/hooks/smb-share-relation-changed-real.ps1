@@ -11,6 +11,8 @@ try {
 
     Write-JujuLog "Running : Start-SMBShareRelationChanged"
     Start-SMBShareRelationChanged
+    Write-JujuLog "Running : Start-S2DRelationChanged"
+    Start-S2DRelationChanged
 } catch {
     Write-HookTracebackToLog $_
     exit 1

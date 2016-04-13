@@ -18,8 +18,8 @@ try {
         if(!$ctx["adcredentials"]){
             return
         }
-        $creds = $ctx["adcredentials"][0]["pscredentials"]
-        Grant-PrivilegesOnDomainUser -Username $ctx["adcredentials"][0]["username"]
+        $adUsername = $ctx["adcredentials"][0]["username"]
+        Grant-PrivilegesOnDomainUser -Username $adUsername
 
         $hooksFolder = Join-Path $env:CHARM_DIR "hooks"
         $wrapper = Join-Path $hooksFolder "run-with-ad-credentials.ps1"

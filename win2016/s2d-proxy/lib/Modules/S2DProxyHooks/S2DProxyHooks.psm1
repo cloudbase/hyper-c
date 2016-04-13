@@ -29,12 +29,14 @@ function Get-S2DContext {
 function Get-SMBContext {
     $requiredCtxt = @{
         "share-name" = $null;
-        "computer-group" = $null
+        "accounts" = $null
     }
     $ctxt = Get-JujuRelationContext -Relation "smb-share" -RequiredContext $requiredCtxt
     if(!$ctxt.Count) {
         return @{}
     }
+    $unmarshalledAccounts = Get-UnmarshaledObject $ctxt['accounts']
+    $ctxt['accounts'] = $unmarshalledAccounts
     return $ctxt
 }
 
@@ -84,7 +86,9 @@ function Enable-S2D {
         [Parameter(Mandatory=$true)]
         [string]$Domain,
         [Parameter(Mandatory=$true)]
-        [string]$ClusterName
+        [string]$ClusterName,
+        [Parameter(Mandatory=$true)]
+        [Microsoft.Management.Infrastructure.CimSession]$Session
     )
 
     try {
@@ -95,12 +99,13 @@ function Enable-S2D {
         Write-JujuWarning "Delaying Enable-ClusterStorageSpacesDirect"
         return $false
     }
-    Write-JujuInfo ("cluster DAS mode is: " + $cluster.DASModeEnabled)
-    if($cluster.DASModeEnabled -eq 1){
+    Write-JujuInfo ("cluster S2DEnabled mode is: " + $cluster.S2DEnabled)
+    if($cluster.S2DEnabled -eq 1){
         return $true
     }
     Write-JujuInfo "Enabling Storage Spaces Direct"
-    Enable-ClusterStorageSpacesDirect -Cluster ($clusterName + "." + $Domain)
+    Enable-ClusterStorageSpacesDirect -Session $Session -Confirm:$false `
+                                      -Autoconfig $false -ErrorAction Stop
     return $true
 }
 
@@ -326,7 +331,7 @@ function Start-S2DRelationChanged {
     try {
         Write-JujuInfo "Running Enable-S2D"
         Start-ExecuteWithRetry {
-            Enable-S2D -Domain $fqdn -ClusterName $s2dContext["joined-cluster-name"]
+            Enable-S2D -Domain $fqdn -ClusterName $s2dContext["joined-cluster-name"] -Session $session
         } -RetryInterval 10 -MaxRetryCount 10
         Write-JujuInfo "Running Create-StoragePool"
         Start-ExecuteWithRetry {
@@ -347,6 +352,14 @@ function Start-S2DRelationChanged {
     } finally {
         Remove-CimSession $session
     }
+
+    $charmDir = Get-JujuCharmDir
+    foreach($node in $nodes) {
+        Start-ExternalCommand { & $charmDir\hooks\Set-KCD.ps1 $node $scaleoutname -ServiceType "Microsoft Virtual System Migration Service" }
+        Start-ExternalCommand { & $charmDir\hooks\Set-KCD.ps1 $node $scaleoutname -ServiceType "cifs" }
+        Start-ExternalCommand { & $charmDir\hooks\Set-KCD.ps1 $scaleoutname $node -ServiceType "Microsoft Virtual System Migration Service" }
+        Start-ExternalCommand { & $charmDir\hooks\Set-KCD.ps1 $scaleoutname $node -ServiceType "cifs" }
+    }
 }
 
 function Start-KCDScript {
@@ -354,14 +367,17 @@ function Start-KCDScript {
         [Parameter(Mandatory=$true)]
         [string[]]$S2DNodes
     )
-    $node = $S2DNodes[0]
-    $peers = $S2DNodes[1..($S2DNodes.Length)]
     $charmDir = Get-JujuCharmDir
-    foreach($peer in $peers){
-        Start-ExternalCommand { & $charmDir\hooks\Set-KCD.ps1 $node $peer -ServiceType "Microsoft Virtual System Migration Service" }
-        Start-ExternalCommand { & $charmDir\hooks\Set-KCD.ps1 $node $peer -ServiceType "cifs" }
-        Start-ExternalCommand { & $charmDir\hooks\Set-KCD.ps1 $peer $node -ServiceType "Microsoft Virtual System Migration Service" }
-        Start-ExternalCommand { & $charmDir\hooks\Set-KCD.ps1 $peer $node -ServiceType "cifs" }
+    foreach($node1 in $S2DNodes) {
+        foreach($node2 in $S2DNodes) {
+            if ($node1 -eq $node2) {
+                continue
+            }
+            Start-ExternalCommand { & $charmDir\hooks\Set-KCD.ps1 $node1 $node2 -ServiceType "Microsoft Virtual System Migration Service" }
+            Start-ExternalCommand { & $charmDir\hooks\Set-KCD.ps1 $node1 $node2 -ServiceType "cifs" }
+            Start-ExternalCommand { & $charmDir\hooks\Set-KCD.ps1 $node2 $node1 -ServiceType "Microsoft Virtual System Migration Service" }
+            Start-ExternalCommand { & $charmDir\hooks\Set-KCD.ps1 $node2 $node1 -ServiceType "cifs" }
+        }
     }
     return $true
 }
@@ -378,11 +394,10 @@ function New-RelationSMBShare {
         [Microsoft.Management.Infrastructure.CimSession]$Session
     )
     $share = Get-SmbShare -Name $Name -CimSession $Session -ErrorAction SilentlyContinue
-    if ($share) {
-        Write-JujuWarning "Share was already created."
-        return
+    if (!$share) {
+        Write-JujuLog "Creating smb share $Name"
+        New-SmbShare -Name $Name -Path $SharePath -CimSession $Session -ErrorAction Stop | Out-Null
     }
-    New-SmbShare -Name $Name -Path $SharePath -CimSession $Session -ErrorAction Stop | Out-Null
     foreach($account in $Accounts) {
         try {
             Grant-SmbShareAccess -Name $Name -AccountName $account -AccessRight Full `
@@ -425,18 +440,21 @@ function Start-SMBShareRelationChanged {
         } -ArgumentList $sharePath -ErrorAction Stop
     }
     $session = Get-NewCimSession -Nodes $s2dNodes
-    New-RelationSMBShare -Name $smbCtxt["share-name"] -Accounts @($smbCtxt["computer-group"]) `
+    New-RelationSMBShare -Name $smbCtxt["share-name"] -Accounts $smbCtxt["accounts"] `
                          -SharePath $sharePath -Session $session
     Start-ExecuteWithRetry {
         Invoke-Command -ComputerName $s2dNodes[0] -ScriptBlock {
-            Param($shareName, $account)
+            Param($shareName)
+
+            Set-SmbPathAcl -ShareName $shareName
             $sharesPath = (Get-SmbShare -Name $shareName).Path
-            $permissions = "{0}:(OI)(CI)(F)" -f $account
-            icacls.exe $sharesPath /grant $permissions /T /C | Out-Null
-            if ($LASTEXITCODE) {
-                Throw "Exit code: $LASTEXITCODE"
-            }
-        } -ArgumentList @($smbCtxt["share-name"], $smbCtxt['computer-group']) -ErrorAction Stop
+
+            # Removes inherited permissions
+            $acl = Get-ACL -Path $sharesPath
+            $acl.SetAccessRuleProtection($True, $False)
+            Set-Acl -Path $sharesPath -AclObject $acl
+
+        } -ArgumentList @($smbCtxt["share-name"]) -ErrorAction Stop
     }
 
     $rids = Get-JujuRelationIds -Relation 'smb-share'
