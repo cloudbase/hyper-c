@@ -360,6 +360,8 @@ function Start-S2DRelationChanged {
         Start-ExternalCommand { & $charmDir\hooks\Set-KCD.ps1 $scaleoutname $node -ServiceType "Microsoft Virtual System Migration Service" }
         Start-ExternalCommand { & $charmDir\hooks\Set-KCD.ps1 $scaleoutname $node -ServiceType "cifs" }
     }
+
+    Set-JujuStatus -Status active -Message "Unit is ready"
 }
 
 function Start-KCDScript {
