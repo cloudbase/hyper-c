@@ -145,9 +145,8 @@ function CreateNew-ADGroup {
         $adType = $s[0].replace('"', "")
         $adTypeValue= $s[1].replace('"', "")
         if ($adType -eq "OU") {
-            Write-JujuInfo ("Creating {0}" -f $s[1])
+            Write-JujuInfo ("Creating {0} Organizational Unit" -f $s[1])
             $ou = CreateNew-ADOU $adTypeValue $dn
-            Set-GPInheritance -Target "OU=$adTypeValue,$dn" -IsBlocked Yes
         } elseif ($adType -eq "CN") {
             $groupName = $adTypeValue
         }
