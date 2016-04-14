@@ -1314,6 +1314,7 @@ function Start-InstallHook {
         # No need to error out the hook if this fails.
         Write-JujuWarning "Failed to set power scheme."
     }
+    Start-TimeResync
     $netbiosName = Convert-JujuUnitNameToNetbios
     $hostnameChanged = Get-CharmState -Namespace "Common" -Key "HostnameChanged"
     $hostnameReboot = $false
@@ -1324,7 +1325,10 @@ function Start-InstallHook {
         $hostnameReboot = $true
     }
     $prereqReboot = Install-Prerequisites
-    Start-TimeResync
+    $flagReboot = Set-InsecureGuestAuth
+    if ($hostnameReboot -or $flagReboot -or $prereqReboot) {
+        Invoke-JujuReboot -Now
+    }
     Import-CloudbaseCert
     Start-ConfigureVMSwitch
     $installerPath = Get-NovaInstaller
@@ -1332,10 +1336,6 @@ function Start-InstallHook {
     Confirm-ServicePrerequisites
     Start-ConfigureNeutronAgent
     Enable-MSiSCSI
-    $flagReboot = Set-InsecureGuestAuth
-    if ($hostnameReboot -or $flagReboot -or $prereqReboot) {
-        Invoke-JujuReboot -Now
-    }
     Remove-UnhealthyStoragePools
 }
 
