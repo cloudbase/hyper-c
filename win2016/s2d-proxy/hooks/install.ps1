@@ -20,7 +20,7 @@ try {
     if (!($hostnameChanged) -and ($computername -ne $netbiosName)) {
         Write-JujuWarning ("Changing computername from {0} to {1}" -f @($computername, $netbiosName))
         Rename-Computer -NewName $netbiosName
-        Set-CharmState -Namespace "Common" -Key "HostnameChanged" -Value "True"
+        Set-CharmState -Namespace "Common" -Key "HostnameChanged" -Value $true
         Invoke-JujuReboot -Now
     }
 } catch {
