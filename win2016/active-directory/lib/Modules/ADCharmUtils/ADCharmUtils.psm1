@@ -3,6 +3,12 @@
 #
 $computername = [System.Net.Dns]::GetHostName()
 
+Import-Module JujuWindowsUtils
+Import-Module JujuLogging
+Import-Module JujuHooks
+Import-Module JujuUtils
+
+
 function Set-UserRunAsRights {
     Param
     (

@@ -45,6 +45,4 @@ VariablesToExport = '*'
 # Aliases to export from this module
 AliasesToExport = '*'
 
-RequiredModules = @("JujuWindowsUtils", "JujuLogging", "JujuHooks", "JujuUtils")
-
 }
