@@ -12,6 +12,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+Import-Module JujuLogging
+
 function Convert-FileToBase64{
     <#
     .SYNOPSIS
@@ -350,26 +352,6 @@ function Start-ExecuteWithRetry {
     }
 }
 
-function Test-FileIntegrity {
-    [CmdletBinding()]
-    Param(
-        [Parameter(Mandatory=$true, ValueFromPipeline=$true, Position=0)]
-        [string]$File,
-        [Parameter(Mandatory=$true)]
-        [string]$ExpectedHash,
-        [Parameter(Mandatory=$false)]
-        [ValidateSet("SHA1", "SHA256", "SHA384", "SHA512", "MACTripleDES", "MD5", "RIPEMD160")]
-        [string]$Algorithm="SHA1"
-    )
-    PROCESS {
-        $hash = (Get-FileHash -Path $File -Algorithm $Algorithm).Hash
-        if ($hash -ne $ExpectedHash) {
-            throw ("File integrity check failed for {0}. Expected {1}, got {2}" -f @($File, $ExpectedHash, $hash))
-        }
-        return $true
-    }
-}
-
 function Get-SanePath {
     <#
     .SYNOPSIS
@@ -407,6 +389,28 @@ function Add-ToUserPath {
             setx PATH $newPath
         } -ErrorMessage "Failed to set user path"
         $env:PATH = $newPath
+    }
+}
+
+function Add-ToSystemPath {
+    <#
+    .SYNOPSIS
+    Permanently add an additional path to the system path.
+    .PARAMETER Path
+    Extra path to add to $env:PATH
+    #>
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Path
+    )
+    PROCESS {
+        $currentPath = Get-SystemPath
+        if ($Path -in $currentPath.Split(';')){
+            return
+        }
+        $newPath = $currentPath + ";" + $Path
+        [Environment]::SetEnvironmentVariable("PATH", $newPath, "Machine")
     }
 }
 
@@ -534,3 +538,5 @@ function Get-PSStringParamsFromHashtable {
         return $args -join " "
     }
 }
+
+Export-ModuleMember -Function * -Alias *

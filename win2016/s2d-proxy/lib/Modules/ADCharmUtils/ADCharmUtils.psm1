@@ -2,12 +2,14 @@
 # Copyright 2016 Cloudbase Solutions Srl
 #
 
+Import-Module JujuWindowsUtils
+Import-Module JujuLogging
+Import-Module JujuHooks
+Import-Module JujuUtils
+
 $computername = [System.Net.Dns]::GetHostName()
 
 $ErrorActionPreference = 'Stop'
-$nova_compute = "nova-compute"
-
-$global:cimCreds = $null
 
 function Confirm-IsInDomain {
     param(
@@ -71,6 +73,9 @@ function Get-MyADCredentials {
     foreach($i in $obj.keys){
         $usr = $Domain + "\" + $i
         $clearPasswd = $obj[$i]
+        if(!$clearPasswd) {
+            continue
+        }
         $encPasswd = ConvertTo-SecureString -AsPlainText -Force $clearPasswd
         $pscreds = [System.Management.Automation.PSCredential](New-Object System.Management.Automation.PSCredential($usr, $encPasswd))
         $c = @{
@@ -87,7 +92,7 @@ function Get-ActiveDirectoryContext {
     PROCESS {
         $blobKey = ("djoin-" + $computername)
         $requiredCtx = @{
-            "already-joined" = $null;
+            "already-joined-$computername" = $null;
             "address" = $null;
             "domainName" = $null;
             "netbiosname" = $null;
@@ -106,18 +111,24 @@ function Get-ActiveDirectoryContext {
         # A node may be added to an active directory domain outside of Juju, or it may be added by another charm colocated.
         # If another charm adds the computer to AD, we still get back a djoin_blob, but if we manually add a computer, the
         # djoin blob will be empty. That is the reason we make the djoin blob optional.
-        if($ctx["already-joined"] -eq $false -and !$ctx[$blobKey]){
+        if(($ctx["already-joined-$computername"] -eq $false) -and !$ctx[$blobKey]){
             return @{}
         }
 
         # replace the djoin data key with something less dynamic
         $djoin_data = $ctx[$blobKey]
         $ctx.Remove($blobKey)
-        $ctx["djoin_blob"] = $djoin_data
+        [string]$ctx["djoin_blob"] = $djoin_data
 
         # Deserialize credential info
+        Write-JujuInfo ("ADCredentials is: {0}" -f $ctx["adcredentials"])
         if($ctx["adcredentials"]) {
-            [array]$ctx["adcredentials"] = Get-MyADCredentials -Credentials $ctx["adcredentials"] -Domain $ctx["netbiosname"]
+            $creds = Get-MyADCredentials -Credentials $ctx["adcredentials"] -Domain $ctx["netbiosname"]
+            if($creds) {
+                [array]$ctx["adcredentials"] = $creds
+            } else {
+                $ctx["adcredentials"] = $null
+            }
         }
         return $ctx
     }
@@ -131,7 +142,7 @@ function Invoke-Djoin {
     )
     PROCESS {
         Write-JujuInfo "Started Join Domain"
-        
+
         $networkName = (Get-MainNetadapter)
         Set-DnsClientServerAddress -InterfaceAlias $networkName -ServerAddresses $params["address"]
         $cmd = @("ipconfig", "/flushdns")
@@ -148,11 +159,10 @@ function Invoke-Djoin {
 }
 
 function Start-JoinDomain {
-    # Install-WindowsFeatures $WINDOWS_FEATURES 
     $params = Get-ActiveDirectoryContext
     if ($params.Count){
         if (!(Confirm-IsInDomain $params['domainName'])) {
-            if (!$params["djoin_blob"] -and $params["already-joined"]) {
+            if (!$params["djoin_blob"] -and $params["already-joined-$computername"]) {
                 Throw "The domain controller reports that a computer with the same hostname as this unit is already added to the domain, and we did not get any domain join information."
             }
             Invoke-Djoin -params $params
@@ -163,4 +173,3 @@ function Start-JoinDomain {
     Write-JujuInfo "ad-join returned EMPTY"
     return $false
 }
-

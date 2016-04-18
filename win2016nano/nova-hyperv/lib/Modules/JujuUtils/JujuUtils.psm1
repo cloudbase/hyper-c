@@ -12,7 +12,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-Import-Module JujuLoging
+Import-Module JujuLogging
 
 function Convert-FileToBase64{
     <#
@@ -392,6 +392,28 @@ function Add-ToUserPath {
     }
 }
 
+function Add-ToSystemPath {
+    <#
+    .SYNOPSIS
+    Permanently add an additional path to the system path.
+    .PARAMETER Path
+    Extra path to add to $env:PATH
+    #>
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$Path
+    )
+    PROCESS {
+        $currentPath = Get-SystemPath
+        if ($Path -in $currentPath.Split(';')){
+            return
+        }
+        $newPath = $currentPath + ";" + $Path
+        [Environment]::SetEnvironmentVariable("PATH", $newPath, "Machine")
+    }
+}
+
 function Get-MarshaledObject {
     <#
     .SYNOPSIS
@@ -514,35 +536,6 @@ function Get-PSStringParamsFromHashtable {
         }
 
         return $args -join " "
-    }
-}
-
-function Get-RandomString {
-    <#
-    .SYNOPSIS
-    Returns a random string of characters, suitable for passwords
-    .PARAMETER Length
-    length of the random string.
-    .PARAMETER Weak
-    Use a smaller set of characters
-    #>
-    [CmdletBinding()]
-    Param(
-        [int]$Length=16,
-        [switch]$Weak=$false
-    )
-    PROCESS {
-        if(!$Weak) {
-            $characters = 33..122
-        }else {
-            $characters = (48..57) + (65..90) + (97..122) + @(64,61,35)
-        }
-        $passwd = ""
-        for($i=0; $i -lt $Length; $i++){
-        $c = get-random -input $characters
-        $passwd += [char]$c
-        }
-        return $passwd
     }
 }
 

@@ -1,4 +1,18 @@
-$ErrorActionPreference = "Stop"
+# Copyright 2016 Cloudbase Solutions Srl
+#
+#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may obtain
+#    a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#    License for the specific language governing permissions and limitations
+#    under the License.
+
+Import-Module Microsoft.Powershell.Utility
 
 $version = $PSVersionTable.PSVersion.Major
 if ($version -lt 4){
@@ -48,10 +62,30 @@ function Invoke-JujuCommand {
     }
 }
 
+function Test-FileIntegrity {
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$true, ValueFromPipeline=$true, Position=0)]
+        [string]$File,
+        [Parameter(Mandatory=$true)]
+        [string]$ExpectedHash,
+        [Parameter(Mandatory=$false)]
+        [ValidateSet("SHA1", "SHA256", "SHA384", "SHA512", "MACTripleDES", "MD5", "RIPEMD160")]
+        [string]$Algorithm="SHA1"
+    )
+    PROCESS {
+        $hash = (Get-FileHash -Path $File -Algorithm $Algorithm).Hash
+        if ($hash -ne $ExpectedHash) {
+            throw ("File integrity check failed for {0}. Expected {1}, got {2}" -f @($File, $ExpectedHash, $hash))
+        }
+        return $true
+    }
+}
+
 function Invoke-FastWebRequest {
     <#
     .SYNOPSIS
-    Invoke-FastWebRequest downloads a file form the web via HTTP. This function will work on all modern windows versions,
+    Invoke-FastWebRequest downloads a file from the web via HTTP. This function will work on all modern windows versions,
     including Windows Server Nano. This function also allows file integrity checks using common hashing algorithms:
 
     "SHA1", "SHA256", "SHA384", "SHA512", "MACTripleDES", "MD5", "RIPEMD160"
@@ -104,23 +138,20 @@ function Invoke-FastWebRequest {
         }
 
         $client = new-object System.Net.Http.HttpClient
-        $task = $client.GetAsync($Uri)
-        $task.wait()
-        $response = $task.Result
+        $requestMessage = new-object System.Net.Http.HttpRequestMessage "HEAD", $Uri
+        $headRequest = $client.SendAsync($requestMessage)
+        $response = $headRequest.Result
         $status = $response.EnsureSuccessStatusCode()
+        $contentLength = $response.Content.Headers.ContentLength
 
+        $task = $client.GetStreamAsync($Uri)
+        $response = $task.Result
         $outStream = New-Object IO.FileStream $OutFile, Create, Write, None
 
         try {
-            $task = $response.Content.ReadAsStreamAsync()
-            $task.Wait()
-            $inStream = $task.Result
-
-            $contentLength = $response.Content.Headers.ContentLength
-
             $totRead = 0
             $buffer = New-Object Byte[] 1MB
-            while (($read = $inStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            while (($read = $response.Read($buffer, 0, $buffer.Length)) -gt 0) {
                 $totRead += $read
                 $outStream.Write($buffer, 0, $read);
 
@@ -129,24 +160,23 @@ function Invoke-FastWebRequest {
                     Write-Progress -Activity "Downloading: $Uri" -PercentComplete $percComplete
                 }
             }
-
-            if(!$SkipIntegrityCheck) {
-                $fragment = $Uri.Fragment.Trim('#')
-                if (!$fragment){
-                    return
-                }
-                $details = $fragment.Split("=")
-                $algorithm = $details[0]
-                $hash = $details[1]
-                if($algorithm -in @("SHA1", "SHA256", "SHA384", "SHA512", "MACTripleDES", "MD5", "RIPEMD160")){
-                    Test-FileIntegrity -File $OutFile -Algorithm $algorithm -ExpectedHash $hash
-                } else {
-                    Write-JujuWarning "Hash algorithm $algorithm not recognized. Skipping file integrity check."
-                }
-            }
         }
         finally {
             $outStream.Close()
+        }
+        if(!$SkipIntegrityCheck) {
+            $fragment = $Uri.Fragment.Trim('#')
+            if (!$fragment){
+                return
+            }
+            $details = $fragment.Split("=")
+            $algorithm = $details[0]
+            $hash = $details[1]
+            if($algorithm -in @("SHA1", "SHA256", "SHA384", "SHA512", "MACTripleDES", "MD5", "RIPEMD160")){
+                Test-FileIntegrity -File $OutFile -Algorithm $algorithm -ExpectedHash $hash
+            } else {
+                Throw "Hash algorithm $algorithm not recognized."
+            }
         }
     }
 }
@@ -179,3 +209,5 @@ function Get-RandomString {
         return $passwd
     }
 }
+
+Export-ModuleMember -Function * -Alias *

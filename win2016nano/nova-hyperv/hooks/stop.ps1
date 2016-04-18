@@ -1,15 +1,15 @@
 #
-# Copyright 2014 Cloudbase Solutions SRL
+# Copyright 2014-2016 Cloudbase Solutions SRL
 #
 
-# we want to exit on error
 $ErrorActionPreference = "Stop"
-Import-Module JujuLoging
+
+Import-Module JujuLogging
 
 try {
     Import-Module ComputeHooks
 
-    Stop-Service "nova-compute"
+    Stop-Nova
     Stop-Neutron
 } catch {
     Write-HookTracebackToLog $_

@@ -46,7 +46,7 @@ Description = 'Helper module for Juju Charms'
 PowerShellVersion = '3.0'
 
 # Modules that must be imported into the global environment prior to importing this module
-# RequiredModules = @("JujuLoging")
+# RequiredModules = @("JujuLogging")
 
 # Functions to export from this module
 FunctionsToExport = @(
@@ -65,12 +65,12 @@ FunctionsToExport = @(
     "Start-ExecuteWithRetry",
     "Get-SanePath",
     "Add-ToUserPath",
+    "Add-ToSystemPath",
     "Get-MarshaledObject",
     "Get-UnmarshaledObject",
     "Get-CmdStringFromHashtable",
     "Get-EscapedQuotedString",
-    "Get-PSStringParamsFromHashtable",
-    "Get-RandomString")
+    "Get-PSStringParamsFromHashtable")
 
 # Cmdlets to export from this module
 CmdletsToExport = '*'

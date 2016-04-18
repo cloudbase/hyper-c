@@ -10,10 +10,11 @@ tags:
 provides:
   cloud-compute:
     interface: nova-compute
-  s2d:
-    interface: s2d-container
-    scope: container
+  ad-info:
+    interface: ad-info
 requires:
+  s2d:
+    interface: s2d
   amqp:
     interface: rabbitmq
   image-service:
@@ -22,6 +23,8 @@ requires:
     interface: nova-ceilometer
   ad-join:
     interface: ad-join
+  failover-cluster:
+    interface: failover-cluster
 peers:
   compute-peer:
     interface: nova

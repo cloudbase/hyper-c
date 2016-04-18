@@ -1,4 +1,12 @@
 options:
+  debug:
+    type: boolean
+    default: False
+    description: "Enable debug logging"
+  verbose:
+    type: boolean
+    default: False
+    description: "Enable verbose logging"
   openstack-origin:
     type: string
     default: liberty
@@ -16,6 +24,14 @@ options:
       - juno
       - kilo
       - liberty
+  ad-computer-group:
+    type: string
+    default: "Nova"
+    description: "Computer group that will be joined after adding AD relation"
+  ad-user:
+    type: string
+    default: "nova-hyperv"
+    description: "User that will created after adding AD relation"
   installer-url:
     type: string
     default: ""
@@ -25,6 +41,13 @@ options:
       If you use this option, you may enable file integrity checking by specifying
       an md5sum at the end of the URL as follows:
         https://example.com/installer.msi#md5=<hash>
+  enable-cluster-driver:
+    type: boolean
+    default: "False"
+    description: |
+      Enables the Hyper-V compute driver for clustering. This requires at least two Hyper-V compute
+      joined to a cluster.
+      NOTE: Available only in releases >= Mitaka
   ovs-installer-url:
     type: string
     default: "https://www.cloudbase.it/downloads/openvswitch-hyperv-installer-beta.msi#md5=9fdf53bb41dd398843a0ac52fe023a65"

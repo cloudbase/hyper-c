@@ -324,6 +324,32 @@ Describe "Test Add-ToUserPath" {
     }
 }
 
+Describe "Test Add-ToSystemPath" {
+    AfterEach {
+        Clear-Environment
+    }
+    Mock Get-SystemPath -ModuleName JujuUtils -Verifiable {
+        return "C:\bogus_path"
+    }
+    Context "adds one path" {
+        It "should add to system path" {
+            Add-ToSystemPath -Path $env:TMP | Should BeNullOrEmpty
+            $systemPath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
+            ($env:TMP -in $systemPath.Split(';')) | Should Be $true
+            Assert-MockCalled Get-SystemPath -Exactly 1 -ModuleName JujuUtils
+        }
+    }
+    Context "adds existing path" {
+        It "should return early" {
+            $oldPath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
+            Add-ToSystemPath -Path "C:\bogus_path" | Should BeNullOrEmpty
+            Assert-MockCalled Get-SystemPath -Exactly 1 -ModuleName JujuUtils
+            $newPath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
+            ($oldPath -eq $newPath) | Should Be $true
+        }
+    }
+}
+
 Describe "Test Get-MarshaledObject" {
     It "Should return a base64 encoded string" {
         $obj = @{"Hello"="world";}

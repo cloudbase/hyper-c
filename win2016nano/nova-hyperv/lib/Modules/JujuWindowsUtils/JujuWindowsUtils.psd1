@@ -45,8 +45,10 @@ Description = 'Helper module for Juju Charms'
 # Minimum version of the Windows PowerShell engine required by this module
 PowerShellVersion = '3.0'
 
+ScriptsToProcess = @("Load-Assemblies.ps1")
+
 # Modules that must be imported into the global environment prior to importing this module
-# RequiredModules = @("JujuUtils","JujuHooks","JujuHelper", "JujuLoging")
+# RequiredModules = @("JujuUtils","JujuHooks","JujuHelper", "JujuLogging")
 
 # Functions to export from this module
 FunctionsToExport = @(
@@ -75,7 +77,11 @@ FunctionsToExport = @(
     "Remove-WindowsUser",
     "Open-Ports",
     "Import-Certificate",
-    "Set-PowerProfile")
+    "Set-PowerProfile",
+    "Get-IniFileValue",
+    "Set-IniFileValue",
+    "Remove-IniFileValue",
+    "Start-ProcessAsUser")
 
 # Cmdlets to export from this module
 CmdletsToExport = '*'

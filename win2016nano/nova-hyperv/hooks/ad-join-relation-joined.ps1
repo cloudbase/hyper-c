@@ -1,17 +1,20 @@
 #
-# Copyright 2016 Cloudbase Solutions Srl
+# Copyright 2014-2016 Cloudbase Solutions SRL
 #
 
-# we want to exit on error
 $ErrorActionPreference = "Stop"
-$computername = [System.Net.Dns]::GetHostName()
-Import-Module JujuLoging
+
+Import-Module JujuLogging
 Import-Module JujuUtils
 Import-Module JujuHooks
 
+$COMPUTERNAME = [System.Net.Dns]::GetHostName()
+
+
 function Get-AdUserAndGroup {
+    $adUser = Get-JujuCharmConfig -Scope 'ad-user'
     $creds = @{
-        "nova-hyperv"=@(
+        $adUser=@(
             "CN=Domain Admins,CN=Users"
         );
     }
@@ -22,19 +25,19 @@ function Get-AdUserAndGroup {
 try {
     Import-Module ADCharmUtils
 
-    $adGroup = "CN=Nova,OU=OpenStack"
-    $encGr = ConvertTo-Base64 $adGroup
+    $group = Get-JujuCharmConfig -Scope 'ad-computer-group'
+    $encGr = ConvertTo-Base64 ("CN={0},OU=OpenStack" -f @($group))
     $adUser = Get-AdUserAndGroup
 
-    $relation_set = @{
+    $relationSettings = @{
         'adusers' = $adUser;
-        'computername' = $computername;
-        "computerGroup"=$encGr;
+        'computername' = $COMPUTERNAME;
+        "computerGroup" = $encGr;
     }
 
-    $rids = relation_ids -reltype "ad-join"
+    $rids = Get-JujuRelationIds -Relation "ad-join"
     foreach ($rid in $rids){
-        $ret = relation_set -relation_id $rid -relation_settings $relation_set
+        $ret = Set-JujuRelation -RelationId $rid -Settings $relationSettings
         if ($ret -eq $false){
            Write-JujuWarning "Failed to set ad-join relation"
         }
