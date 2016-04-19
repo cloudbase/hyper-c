@@ -1283,7 +1283,7 @@ function Set-InsecureGuestAuth {
 
 function Remove-UnhealthyStoragePools {
     # NOTE(ibalutoiu):
-    #     On TP5, after you reinstall the OS and you still have the extra disks that
+    #     On TP4, after you reinstall the OS and you still have the extra disks that
     #     formed a storage pool before, this one is listed with "Unknown" status and
     #     read-only mode. After disabling read-only flag, the storage pool becomes
     #     "Unhealthy" and it's unusable. Thus we need to delete them before
